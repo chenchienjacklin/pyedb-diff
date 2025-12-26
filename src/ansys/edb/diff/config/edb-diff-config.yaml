@@ -1,0 +1,17 @@
+version: 1.0
+ansys_em_root: "C:\\Program Files\\ANSYS Inc\\v261\\AnsysEM"
+host: "127.0.0.1"
+port: 50065
+enable_io_manager: true
+debug: true
+match_rules:
+  MaterialDef: [MatchByName]
+  PackageDef: [MatchByName]
+  ComponentDef: [MatchByName]
+  PadstackDef: [MatchByName]
+  Cell: [MatchByName]
+  Rectangle: [MatchByLayerName, MatchByRectangleProperties]
+  Circle: [MatchByLayerName, MatchByCircleProperties]
+  Polygon: [MatchByLayerName, MatchByPolygonProperties]
+  Path: [MatchByLayerName, MatchByPathProperties]
+  PadstackInstance: [MatchByPadstackInstanceProperties]
