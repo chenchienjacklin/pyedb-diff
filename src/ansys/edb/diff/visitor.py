@@ -1,10 +1,18 @@
+from abc import ABC, abstractmethod
 from collections import OrderedDict
 
 from ansys.edb.core.database import Database
+from ansys.edb.core.definition.component_def import ComponentDef
+from ansys.edb.core.definition.component_model import ComponentModel
 from ansys.edb.core.definition.material_def import MaterialDef
 from ansys.edb.core.definition.padstack_def import PadstackDef, PadstackDefData
 from ansys.edb.core.definition.padstack_def_data import PadType
 from ansys.edb.core.geometry.polygon_data import PolygonData
+from ansys.edb.core.hierarchy.component_group import ComponentGroup
+from ansys.edb.core.hierarchy.group import Group
+from ansys.edb.core.hierarchy.hierarchy_obj import HierarchyObj
+from ansys.edb.core.hierarchy.structure3d import Structure3D
+from ansys.edb.core.hierarchy.via_group import ViaGroup
 from ansys.edb.core.layout.cell import Cell
 from ansys.edb.core.layout.layout import Layout
 from ansys.edb.core.primitive.circle import Circle
@@ -15,7 +23,17 @@ from ansys.edb.core.primitive.primitive import Primitive
 from ansys.edb.core.primitive.rectangle import Rectangle
 
 
-class EdbObjVisitor:
+class VisitorBase(ABC):
+    @abstractmethod
+    def set_visit_types(self, visit_types: dict):
+        pass
+
+    @abstractmethod
+    def visit(self, edb_obj):
+        pass
+
+
+class EdbObjVisitor(VisitorBase):
     def __init__(self, logger=None):
         self.logger = logger
         self.visit_map = {
@@ -23,6 +41,8 @@ class EdbObjVisitor:
             MaterialDef: self.visit_material_def,
             PadstackDef: self.visit_padstack_def,
             PadstackDefData: self.visit_padstack_def_data,
+            ComponentDef: self.visit_component_def,
+            ComponentModel: self.visit_component_model,
             Cell: self.visit_cell,
             Layout: self.visit_layout,
             Rectangle: self.visit_rectangle,
@@ -30,7 +50,19 @@ class EdbObjVisitor:
             Polygon: self.visit_polygon,
             Path: self.visit_path,
             PadstackInstance: self.visit_padstack_instance,
+            ComponentGroup: self.visit_component_group,
+            Structure3D: self.visit_structure3d,
+            ViaGroup: self.visit_via_group,
         }
+
+    def set_visit_types(self, visit_types: dict):
+        excluded_types = [
+            edb_obj
+            for edb_obj, _ in self.visit_map.items()
+            if not visit_types.get(edb_obj.__name__, False)
+        ]
+        for edb_obj in excluded_types:
+            self.visit_map.pop(edb_obj)
 
     def visit(self, edb_obj):
         visitor = self.visit_map.get(type(edb_obj), None)
@@ -48,10 +80,11 @@ class EdbObjVisitor:
                 "version": database.version,
                 "source": database.source,
                 "source_version": database.source_version,
-                "material_defs": [md for md in database.material_defs],
-                "padstack_defs": [pd for pd in database.padstack_defs],
-                "circuit_cells": [cell for cell in database.circuit_cells],
-                "footprint_cells": [cell for cell in database.footprint_cells],
+                "material_defs": database.material_defs if MaterialDef in self.visit_map else [],
+                "padstack_defs": database.padstack_defs if PadstackDef in self.visit_map else [],
+                "component_defs": database.component_defs if ComponentDef in self.visit_map else [],
+                "circuit_cells": database.circuit_cells if Cell in self.visit_map else [],
+                "footprint_cells": database.footprint_cells,
             }
         )
 
@@ -103,6 +136,29 @@ class EdbObjVisitor:
                 )
         return params
 
+    def visit_component_def(self, component_def: ComponentDef):
+        if component_def.id == 0:
+            return OrderedDict()
+
+        return OrderedDict(
+            {
+                "name": component_def.name,
+                "component_models": component_def.component_models,
+            }
+        )
+
+    def visit_component_model(self, component_model: ComponentModel):
+        if component_model.id == 0:
+            return OrderedDict()
+
+        return OrderedDict(
+            {
+                "reference_file": component_model.reference_file,
+                "name": component_model.name,
+                "component_model_type": component_model.component_model_type,
+            }
+        )
+
     def visit_cell(self, cell: Cell):
         if cell.id == 0:
             return OrderedDict()
@@ -127,8 +183,15 @@ class EdbObjVisitor:
 
         return OrderedDict(
             {
-                "primitives": self.visit_primitives(layout.primitives),
-                "padstack_instances": layout.padstack_instances,
+                "primitives": self.visit_primitives(layout.primitives)
+                if any(prim in self.visit_map for prim in [Rectangle, Circle, Polygon, Path])
+                else {},
+                "padstack_instances": layout.padstack_instances
+                if PadstackInstance in self.visit_map
+                else [],
+                "groups": self.visit_groups(layout.groups)
+                if any(grp in self.visit_map for grp in [ComponentGroup, Structure3D, ViaGroup])
+                else {},
             }
         )
 
@@ -137,13 +200,13 @@ class EdbObjVisitor:
         for primitive in primitives:
             try:
                 layer = primitive.layer.is_null
-                if isinstance(primitive, Rectangle):
+                if Rectangle in self.visit_map and isinstance(primitive, Rectangle):
                     prims["rectangles"].append(primitive)
-                elif isinstance(primitive, Circle):
+                elif Circle in self.visit_map and isinstance(primitive, Circle):
                     prims["circles"].append(primitive)
-                elif isinstance(primitive, Polygon):
+                elif Polygon in self.visit_map and isinstance(primitive, Polygon):
                     prims["polygons"].append(primitive)
-                elif isinstance(primitive, Path):
+                elif Path in self.visit_map and isinstance(primitive, Path):
                     prims["paths"].append(primitive)
             except Exception as e:
                 continue
@@ -248,5 +311,76 @@ class EdbObjVisitor:
                 "layer_range": [layer.name for layer in padstack_instance.get_layer_range()],
                 "hole_overrides": padstack_instance.get_hole_overrides(),
                 "is_layout_pin": padstack_instance.is_layout_pin,
+                "group": padstack_instance.group,
             }
         )
+
+    def visit_groups(self, groups: list[Group]):
+        grps = {"component_groups": [], "structure3d_groups": [], "via_groups": []}
+        for group in groups:
+            try:
+                grp = group.cast()
+                if ComponentGroup in self.visit_map and isinstance(grp, ComponentGroup):
+                    grps["component_groups"].append(grp)
+                elif Structure3D in self.visit_map and isinstance(grp, Structure3D):
+                    grps["structure3d_groups"].append(grp)
+                elif ViaGroup in self.visit_map and isinstance(grp, ViaGroup):
+                    grps["via_groups"].append(grp)
+            except Exception as e:
+                continue
+        return grps
+
+    def visit_hierarchy_obj(self, hierarchy_obj: HierarchyObj):
+        if hierarchy_obj.id == 0:
+            return OrderedDict()
+
+        return OrderedDict(
+            {
+                "net_name": hierarchy_obj.net.name if hierarchy_obj.net is not None else "",
+                "transform": hierarchy_obj.transform,
+                "name": hierarchy_obj.name,
+                "component_def": hierarchy_obj.component_def,
+                "placement_layer": hierarchy_obj.placement_layer,
+                "location": hierarchy_obj.location,
+                "solve_independent_preference": hierarchy_obj.solve_independent_preference,
+            }
+        )
+
+    def visit_component_group(self, component_group: ComponentGroup):
+        properties = self.visit_hierarchy_obj(component_group)
+
+        if len(properties) != 0:
+            properties.update(
+                {
+                    "num_pins": component_group.num_pins,
+                    "component_property": component_group.component_property,
+                    "component_type": component_group.component_type,
+                }
+            )
+        return properties
+
+    def visit_structure3d(self, structure3d: Structure3D):
+        properties = self.visit_hierarchy_obj(structure3d)
+
+        if len(properties) != 0:
+            properties.update(
+                {
+                    "material": structure3d.get_material(evaluate=True),
+                    "thickness": structure3d.thickness,
+                    "mesh_closure": structure3d.mesh_closure,
+                }
+            )
+        return properties
+
+    def visit_via_group(self, via_group: ViaGroup):
+        properties = self.visit_hierarchy_obj(via_group)
+
+        if len(properties) != 0:
+            properties.update(
+                {
+                    "outline": self.visit_polygon_data(via_group.outline),
+                    "conductor_percentage": via_group.conductor_percentage,
+                    "persistent": via_group.persistent,
+                }
+            )
+        return properties

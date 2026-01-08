@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
 
@@ -8,7 +9,17 @@ from ansys.edb.diff.matcher import EdbObjMatcher
 from ansys.edb.diff.visitor import EdbObjVisitor
 
 
-class ComparatorBase:
+class ComparatorBase(ABC):
+    @abstractmethod
+    def execute_all(self, objs1, objs2, edb_obj_type=""):
+        pass
+
+    @abstractmethod
+    def execute(self, obj1, obj2):
+        pass
+
+
+class EdbComparator(ComparatorBase):
     def __init__(
         self, visitor: EdbObjVisitor, matcher: EdbObjMatcher, filters: list[FilterBase], logger=None
     ):
@@ -28,7 +39,11 @@ class ComparatorBase:
             try:
                 diff = self.execute(obj1, obj2)
                 if diff is not None:
-                    diffs_list.append(diff)
+                    if any(filter.is_applicable(type(obj1)) for filter in self.filters):
+                        if not all(filter.execute(diff) for filter in self.filters):
+                            diffs_list.append(diff)
+                    else:
+                        diffs_list.append(diff)
             except Exception as e:
                 if self.logger is not None:
                     self.logger.error(f"Failed to compare objects: {e}")
@@ -60,10 +75,7 @@ class ComparatorBase:
             for sub_key in self._merge_keys_in_order(val1, val2):
                 diff_value = self._diff_values(val1.get(sub_key, None), val2.get(sub_key, None))
                 if diff_value is not None:
-                    if len(self.filters) == 0 or not all(
-                        f.execute(diff_value) for f in self.filters
-                    ):
-                        sub_diffs[sub_key] = diff_value
+                    sub_diffs[sub_key] = diff_value
             return sub_diffs if len(sub_diffs) > 0 else None
 
         if isinstance(val1, list) or isinstance(val2, list):

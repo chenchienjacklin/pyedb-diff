@@ -4,6 +4,25 @@ host: "127.0.0.1"
 port: 50065
 enable_io_manager: true
 debug: true
+
+visit_types:
+  Database: true
+  MaterialDef: true
+  PadstackDef: true
+  PadstackDefData: true
+  ComponentDef: true
+  ComponentModel: true
+  Cell: true
+  Layout: true
+  Rectangle: true
+  Circle: true
+  Polygon: true
+  Path: true
+  PadstackInstance: true
+  ComponentGroup: true
+  Structure3D: true
+  ViaGroup: true
+
 match_rules:
   MaterialDef: [MatchByName]
   PackageDef: [MatchByName]
@@ -15,3 +34,4 @@ match_rules:
   Polygon: [MatchByLayerName, MatchByPolygonProperties]
   Path: [MatchByLayerName, MatchByPathProperties]
   PadstackInstance: [MatchByPadstackInstanceProperties]
+  ComponentGroup: [MatchByName]

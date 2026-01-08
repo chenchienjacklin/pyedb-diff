@@ -4,10 +4,10 @@ from pathlib import Path
 
 from yaml import safe_load
 
-from ansys.edb.diff.comparator import ComparatorBase
+from ansys.edb.diff.comparator import EdbComparator
 from ansys.edb.diff.edb_diff import EdbDiff
-from ansys.edb.diff.exporter import ExporterBase
-from ansys.edb.diff.filter import FilterBase
+from ansys.edb.diff.exporter import EdbDiffExporter
+from ansys.edb.diff.filter import EdbDiffFilter
 from ansys.edb.diff.matcher import EdbObjMatcher
 from ansys.edb.diff.visitor import EdbObjVisitor
 
@@ -20,6 +20,7 @@ class EdbDiffBuilderBase:
         self.port = 0
         self.enable_io_manager = False
         self.debug = False
+        self.visit_types = {}
         self.match_rules = {}
         self.logger = None
 
@@ -55,6 +56,7 @@ class EdbDiffBuilderBase:
             self.port = data.get("port", self.port)
             self.enable_io_manager = data.get("enable_io_manager", self.enable_io_manager)
             self.debug = data.get("debug", self.debug)
+            self.visit_types = data.get("visit_types", self.visit_types)
             self.match_rules = data.get("match_rules", self.match_rules)
             return True
         except Exception as e:
@@ -80,11 +82,13 @@ class EdbDiffBuilderBase:
             raise ValueError("EDB Diff Builder configuration is invalid.")
         self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
         visitor = EdbObjVisitor(self.logger)
+        if len(self.visit_types) > 0:
+            visitor.set_visit_types(self.visit_types)
         matcher = EdbObjMatcher(self.logger)
         if len(self.match_rules) > 0:
             matcher.set_match_rules(self.match_rules)
-        comparator = ComparatorBase(visitor, matcher, [FilterBase()], self.logger)
-        exporter = ExporterBase(self.logger)
+        comparator = EdbComparator(visitor, matcher, [EdbDiffFilter(self.logger)], self.logger)
+        exporter = EdbDiffExporter(self.logger)
         edb_diff = EdbDiff(
             self.ansys_em_root,
             self.host,

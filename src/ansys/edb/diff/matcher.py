@@ -1,7 +1,10 @@
+from abc import ABC, abstractmethod
 import inspect
 
+from ansys.edb.core.definition.component_def import ComponentDef
 from ansys.edb.core.definition.material_def import MaterialDef
 from ansys.edb.core.definition.padstack_def import PadstackDef, PadstackDefData
+from ansys.edb.core.hierarchy.component_group import ComponentGroup
 from ansys.edb.core.inner.base import ObjBase
 from ansys.edb.core.layout.cell import Cell
 from ansys.edb.core.layout.layout import Layout
@@ -12,15 +15,6 @@ from ansys.edb.core.primitive.polygon import Polygon
 from ansys.edb.core.primitive.rectangle import Rectangle
 
 import ansys.edb.diff.match_rules as match_rules_module
-from ansys.edb.diff.match_rules import (
-    MatchByCircleProperties,
-    MatchByLayerName,
-    MatchByName,
-    MatchByPadstackInstanceProperties,
-    MatchByPathProperties,
-    MatchByPolygonProperties,
-    MatchByRectangleProperties,
-)
 
 
 class NullCell(Cell):
@@ -33,23 +27,24 @@ class NullLayout(Layout):
         ObjBase.__init__(self, msg)
 
 
-class EdbObjMatcher:
+class MatcherBase(ABC):
+    @abstractmethod
+    def set_match_rules(self, rules: dict):
+        pass
+
+    @abstractmethod
+    def match(self, objs1, objs2, edb_obj_type=""):
+        pass
+
+
+class EdbObjMatcher(MatcherBase):
     def __init__(self, logger=None):
         self.logger = logger
-        self.match_rules = {
-            "MaterialDef": [MatchByName],
-            "PadstackDef": [MatchByName],
-            "Cell": [MatchByName],
-            "Rectangle": [MatchByLayerName, MatchByRectangleProperties],
-            "Circle": [MatchByLayerName, MatchByCircleProperties],
-            "Polygon": [MatchByLayerName, MatchByPolygonProperties],
-            "Path": [MatchByLayerName, MatchByPathProperties],
-            "PadstackInstance": [MatchByPadstackInstanceProperties],
-        }
-
+        self.match_rules = {}
         self.null_edb_objects = {
             "MaterialDef": MaterialDef(None),
             "PackageDef": PadstackDef(None),
+            "ComponentDef": ComponentDef(None),
             "PadstackDefData": PadstackDefData(None),
             "Cell": NullCell(),
             "Layout": NullLayout(),
@@ -58,6 +53,7 @@ class EdbObjMatcher:
             "Polygon": Polygon(None),
             "Path": Path(None),
             "PadstackInstance": PadstackInstance(None),
+            "ComponentGroup": ComponentGroup(None),
         }
 
     def set_match_rules(self, rules: dict):

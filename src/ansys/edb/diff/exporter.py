@@ -1,7 +1,14 @@
+from abc import ABC, abstractmethod
 import json
 
 
-class ExporterBase:
+class ExporterBase(ABC):
+    @abstractmethod
+    def execute(self, comparison_results, output_file):
+        pass
+
+
+class EdbDiffExporter(ExporterBase):
     def __init__(self, logger=None):
         self.logger = logger
 
