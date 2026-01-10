@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from functools import wraps
 
 from ansys.edb.core.database import Database
 from ansys.edb.core.definition.component_def import ComponentDef
@@ -13,6 +14,7 @@ from ansys.edb.core.hierarchy.group import Group
 from ansys.edb.core.hierarchy.hierarchy_obj import HierarchyObj
 from ansys.edb.core.hierarchy.structure3d import Structure3D
 from ansys.edb.core.hierarchy.via_group import ViaGroup
+from ansys.edb.core.inner.base import ObjBase
 from ansys.edb.core.layout.cell import Cell
 from ansys.edb.core.layout.layout import Layout
 from ansys.edb.core.primitive.circle import Circle
@@ -70,10 +72,28 @@ class EdbObjVisitor(VisitorBase):
             return visitor(edb_obj)
         return {}
 
-    def visit_database(self, database: Database):
-        if database.id == 0:
-            return OrderedDict()
+    def visit_objbase(func):
+        @wraps(func)
+        def wrapper(self, obj: ObjBase):
+            objbase_properties = OrderedDict()
+            if not isinstance(obj, ObjBase):
+                self.logger.warning(f"Expected ObjBase instance, got {type(obj)}")
+                return objbase_properties
 
+            if obj.id == 0:
+                return objbase_properties
+
+            objbase_properties["id"] = obj.id
+            properties = func(self, obj)
+
+            if isinstance(properties, dict):
+                objbase_properties.update(properties)
+            return objbase_properties
+
+        return wrapper
+
+    @visit_objbase
+    def visit_database(self, database: Database):
         return OrderedDict(
             {
                 "directory": database.directory,
@@ -88,10 +108,8 @@ class EdbObjVisitor(VisitorBase):
             }
         )
 
+    @visit_objbase
     def visit_material_def(self, material_def: MaterialDef):
-        if material_def.id == 0:
-            return OrderedDict()
-
         material_properties = OrderedDict()
         for material_property in material_def.all_properties:
             row, col = material_def.get_dimensions(material_property)
@@ -101,23 +119,24 @@ class EdbObjVisitor(VisitorBase):
                     values.append(material_def.get_property(material_property, r, c))
             material_properties[material_property.name] = values
 
-        return OrderedDict({"name": material_def.name, "material_properties": material_properties})
-
-    def visit_padstack_def(self, padstack_def: PadstackDef):
-        if padstack_def.id == 0:
-            return OrderedDict()
-
         return OrderedDict(
             {
-                "name": padstack_def.name,
-                "data": padstack_def.data,
+                "name": material_def.name,
+                "material_properties": material_properties,
             }
         )
 
-    def visit_padstack_def_data(self, padstack_def_data: PadstackDefData):
-        if padstack_def_data.id == 0:
-            return OrderedDict()
+    @visit_objbase
+    def visit_padstack_def(self, padstack_def: PadstackDef):
+        return OrderedDict(
+            {
+                "name": padstack_def.name,
+                "data": padstack_def.data if PadstackDefData in self.visit_map else None,
+            }
+        )
 
+    @visit_objbase
+    def visit_padstack_def_data(self, padstack_def_data: PadstackDefData):
         return OrderedDict(
             {
                 "material": padstack_def_data.material,
@@ -136,10 +155,8 @@ class EdbObjVisitor(VisitorBase):
                 )
         return params
 
+    @visit_objbase
     def visit_component_def(self, component_def: ComponentDef):
-        if component_def.id == 0:
-            return OrderedDict()
-
         return OrderedDict(
             {
                 "name": component_def.name,
@@ -147,10 +164,8 @@ class EdbObjVisitor(VisitorBase):
             }
         )
 
+    @visit_objbase
     def visit_component_model(self, component_model: ComponentModel):
-        if component_model.id == 0:
-            return OrderedDict()
-
         return OrderedDict(
             {
                 "reference_file": component_model.reference_file,
@@ -159,10 +174,8 @@ class EdbObjVisitor(VisitorBase):
             }
         )
 
+    @visit_objbase
     def visit_cell(self, cell: Cell):
-        if cell.id == 0:
-            return OrderedDict()
-
         return OrderedDict(
             {
                 "layout": cell.layout,
@@ -177,10 +190,8 @@ class EdbObjVisitor(VisitorBase):
             }
         )
 
+    @visit_objbase
     def visit_layout(self, layout: Layout):
-        if layout.id == 0:
-            return OrderedDict()
-
         return OrderedDict(
             {
                 "primitives": self.visit_primitives(layout.primitives)
@@ -212,67 +223,66 @@ class EdbObjVisitor(VisitorBase):
                 continue
         return prims
 
-    def visit_primitive(self, primitive: Primitive):
-        if primitive.id == 0:
-            return OrderedDict()
-
-        properties = OrderedDict(
-            {
-                "net_name": primitive.net.name if primitive.net is not None else "",
-                "primitive_type": primitive.primitive_type,
-                "layer_name": primitive.layer.name,
-                "is_negative": primitive.is_negative,
-                "is_void": primitive.is_void,
-                "has_voids": primitive.has_voids,
-                "owner": primitive.owner,
-                "is_parameterized": primitive.is_parameterized,
-                "is_zone_primitive": primitive.is_zone_primitive,
-                "can_be_zone_primitive": primitive.can_be_zone_primitive,
-            }
-        )
-        if properties.get("is_void", False):
-            properties.update(
+    def visit_primitive(func):
+        @wraps(func)
+        def wrapper(self, primitive: Primitive):
+            primitive_properties = OrderedDict(
                 {
-                    "voids:": self.visit_primitives(primitive.voids),
+                    "net_name": primitive.net.name if primitive.net is not None else "",
+                    "primitive_type": primitive.primitive_type,
+                    "layer_name": primitive.layer.name,
+                    "is_negative": primitive.is_negative,
+                    "is_void": primitive.is_void,
+                    "has_voids": primitive.has_voids,
+                    "owner": primitive.owner,
+                    "is_parameterized": primitive.is_parameterized,
+                    "is_zone_primitive": primitive.is_zone_primitive,
+                    "can_be_zone_primitive": primitive.can_be_zone_primitive,
                 }
             )
-        return properties
 
+            if primitive.is_void:
+                primitive_properties.update(
+                    {
+                        "voids:": self.visit_primitives(primitive.voids),
+                    }
+                )
+
+            properties = func(self, primitive)
+
+            if isinstance(properties, dict):
+                primitive_properties.update(properties)
+
+            return primitive_properties
+
+        return wrapper
+
+    @visit_objbase
+    @visit_primitive
     def visit_rectangle(self, rectangle: Rectangle):
-        properties = self.visit_primitive(rectangle)
-        if len(properties) != 0:
-            properties.update(
-                OrderedDict(
-                    {
-                        "parameters": rectangle.get_parameters(),
-                    }
-                )
-            )
-        return properties
+        return OrderedDict(
+            {
+                "parameters": rectangle.get_parameters(),
+            }
+        )
 
+    @visit_objbase
+    @visit_primitive
     def visit_circle(self, circle: Circle):
-        properties = self.visit_primitive(circle)
-        if len(properties) != 0:
-            properties.update(
-                OrderedDict(
-                    {
-                        "parameters": circle.get_parameters(),
-                    }
-                )
-            )
-        return properties
+        return OrderedDict(
+            {
+                "parameters": circle.get_parameters(),
+            }
+        )
 
+    @visit_objbase
+    @visit_primitive
     def visit_polygon(self, polygon: Polygon):
-        properties = self.visit_primitive(polygon)
-        if len(properties) != 0:
-            properties.update(
-                OrderedDict(
-                    {
-                        "polygon_data": self.visit_polygon_data(polygon.polygon_data),
-                    }
-                )
-            )
-        return properties
+        return OrderedDict(
+            {
+                "polygon_data": self.visit_polygon_data(polygon.polygon_data),
+            }
+        )
 
     def visit_polygon_data(self, polygon_data: PolygonData):
         return OrderedDict(
@@ -283,23 +293,18 @@ class EdbObjVisitor(VisitorBase):
             }
         )
 
+    @visit_objbase
+    @visit_primitive
     def visit_path(self, path: Path):
-        properties = self.visit_primitive(path)
-        if len(properties) != 0:
-            properties.update(
-                OrderedDict(
-                    {
-                        "center_line": self.visit_polygon_data(path.center_line),
-                        "width": path.width,
-                    }
-                )
-            )
-        return properties
+        return OrderedDict(
+            {
+                "center_line": self.visit_polygon_data(path.center_line),
+                "width": path.width,
+            }
+        )
 
+    @visit_objbase
     def visit_padstack_instance(self, padstack_instance: PadstackInstance):
-        if padstack_instance.id == 0:
-            return OrderedDict()
-
         position_and_rotation = padstack_instance.get_position_and_rotation()
         return OrderedDict(
             {
@@ -330,57 +335,59 @@ class EdbObjVisitor(VisitorBase):
                 continue
         return grps
 
-    def visit_hierarchy_obj(self, hierarchy_obj: HierarchyObj):
-        if hierarchy_obj.id == 0:
-            return OrderedDict()
+    def visit_hierarchy_obj(func):
+        @wraps(func)
+        def wrapper(self, hierarchy_obj: HierarchyObj):
+            hierarchy_obj_properties = OrderedDict(
+                {
+                    "net_name": hierarchy_obj.net.name if hierarchy_obj.net is not None else "",
+                    "transform": hierarchy_obj.transform,
+                    "name": hierarchy_obj.name,
+                    "component_def": hierarchy_obj.component_def,
+                    "placement_layer": hierarchy_obj.placement_layer,
+                    "location": hierarchy_obj.location,
+                    "solve_independent_preference": hierarchy_obj.solve_independent_preference,
+                }
+            )
 
+            properties = func(self, hierarchy_obj)
+
+            if isinstance(properties, dict):
+                hierarchy_obj_properties.update(properties)
+
+            return hierarchy_obj_properties
+
+        return wrapper
+
+    @visit_objbase
+    @visit_hierarchy_obj
+    def visit_component_group(self, component_group: ComponentGroup):
         return OrderedDict(
             {
-                "net_name": hierarchy_obj.net.name if hierarchy_obj.net is not None else "",
-                "transform": hierarchy_obj.transform,
-                "name": hierarchy_obj.name,
-                "component_def": hierarchy_obj.component_def,
-                "placement_layer": hierarchy_obj.placement_layer,
-                "location": hierarchy_obj.location,
-                "solve_independent_preference": hierarchy_obj.solve_independent_preference,
+                "num_pins": component_group.num_pins,
+                "component_property": component_group.component_property,
+                "component_type": component_group.component_type,
             }
         )
 
-    def visit_component_group(self, component_group: ComponentGroup):
-        properties = self.visit_hierarchy_obj(component_group)
-
-        if len(properties) != 0:
-            properties.update(
-                {
-                    "num_pins": component_group.num_pins,
-                    "component_property": component_group.component_property,
-                    "component_type": component_group.component_type,
-                }
-            )
-        return properties
-
+    @visit_objbase
+    @visit_hierarchy_obj
     def visit_structure3d(self, structure3d: Structure3D):
-        properties = self.visit_hierarchy_obj(structure3d)
+        return OrderedDict(
+            {
+                "material": structure3d.get_material(evaluate=True),
+                "thickness": structure3d.thickness,
+                "mesh_closure": structure3d.mesh_closure,
+            }
+        )
 
-        if len(properties) != 0:
-            properties.update(
-                {
-                    "material": structure3d.get_material(evaluate=True),
-                    "thickness": structure3d.thickness,
-                    "mesh_closure": structure3d.mesh_closure,
-                }
-            )
-        return properties
-
+    @visit_objbase
+    @visit_hierarchy_obj
     def visit_via_group(self, via_group: ViaGroup):
-        properties = self.visit_hierarchy_obj(via_group)
-
-        if len(properties) != 0:
-            properties.update(
-                {
-                    "outline": self.visit_polygon_data(via_group.outline),
-                    "conductor_percentage": via_group.conductor_percentage,
-                    "persistent": via_group.persistent,
-                }
-            )
-        return properties
+        return OrderedDict(
+            {
+                "outline": self.visit_polygon_data(via_group.outline),
+                "conductor_percentage": via_group.conductor_percentage,
+                "persistent": via_group.persistent,
+            }
+        )

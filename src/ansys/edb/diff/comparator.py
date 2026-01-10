@@ -39,11 +39,7 @@ class EdbComparator(ComparatorBase):
             try:
                 diff = self.execute(obj1, obj2)
                 if diff is not None:
-                    if any(filter.is_applicable(type(obj1)) for filter in self.filters):
-                        if not all(filter.execute(diff) for filter in self.filters):
-                            diffs_list.append(diff)
-                    else:
-                        diffs_list.append(diff)
+                    diffs_list.append(diff)
             except Exception as e:
                 if self.logger is not None:
                     self.logger.error(f"Failed to compare objects: {e}")
@@ -52,7 +48,14 @@ class EdbComparator(ComparatorBase):
     def execute(self, obj1, obj2):
         obj1_properties = self.visitor.visit(obj1)
         obj2_properties = self.visitor.visit(obj2)
-        return self._diff_values(obj1_properties, obj2_properties)
+        diff = self._diff_values(obj1_properties, obj2_properties)
+        if diff is not None:
+            if any(filter.is_applicable(type(obj1)) for filter in self.filters):
+                if not all(filter.execute(diff) for filter in self.filters):
+                    return diff
+            else:
+                return diff
+        return None
 
     def _merge_keys_in_order(self, d1, d2):
         keys = []

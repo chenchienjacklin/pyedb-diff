@@ -3,7 +3,7 @@ import logging
 
 from ansys.edb.diff.edb_diff_builder import EdbDiffBuilderBase
 
-logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
 LOGGER = logging.getLogger("edb_diff")
 
 
