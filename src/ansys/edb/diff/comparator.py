@@ -97,6 +97,25 @@ class EdbComparator(ComparatorBase):
             if is_obj_base:
                 return self.execute_all(val1, val2, edb_obj_type)
 
+        if isinstance(val1, tuple) or isinstance(val2, tuple):
+            if val1 is None:
+                val1 = tuple()
+            if val2 is None:
+                val2 = tuple()
+
+            if len(val1) == 0 and len(val2) == 0:
+                return None
+
+            # Element-wise comparison for tuples, fill with None if lengths differ
+            max_length = max(len(val1), len(val2))
+            val1_extended = val1 + (None,) * (max_length - len(val1))
+            val2_extended = val2 + (None,) * (max_length - len(val2))
+            diffs = []
+            for v1, v2 in zip(val1_extended, val2_extended):
+                diff = self._diff_values(v1, v2)
+                diffs.append(diff)
+            return diffs if any(d is not None for d in diffs) else None
+
         if isinstance(val1, ObjBase) or isinstance(val2, ObjBase):
             if val1 is None:
                 val1 = self.matcher.null_edb_objects.get(type(val2).__name__, None)

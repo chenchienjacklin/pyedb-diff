@@ -150,9 +150,18 @@ class EdbObjVisitor(VisitorBase):
         for pad_type in [PadType.REGULAR_PAD, PadType.ANTI_PAD, PadType.THERMAL_PAD]:
             params[pad_type.name] = OrderedDict()
             for layer_name in padstack_def_data.layer_names:
-                params[pad_type.name][layer_name] = padstack_def_data.get_pad_parameters(
-                    layer_name, pad_type
-                )
+                pad_parameters = padstack_def_data.get_pad_parameters(layer_name, pad_type)
+                if (
+                    pad_parameters is not None
+                    and len(pad_parameters) > 0
+                    and isinstance(pad_parameters[0], PolygonData)
+                ):
+                    new_pad_parameters = list(pad_parameters)
+                    new_pad_parameters[0] = self.visit_polygon_data(pad_parameters[0])
+                    params[pad_type.name][layer_name] = tuple(new_pad_parameters)
+                    continue
+
+                params[pad_type.name][layer_name] = pad_parameters
         return params
 
     @visit_objbase
@@ -220,6 +229,8 @@ class EdbObjVisitor(VisitorBase):
                 elif Path in self.visit_map and isinstance(primitive, Path):
                     prims["paths"].append(primitive)
             except Exception as e:
+                if self.logger is not None:
+                    self.logger.warning(f"Skipping primitive due to error: {e}")
                 continue
         return prims
 
@@ -306,6 +317,15 @@ class EdbObjVisitor(VisitorBase):
     @visit_objbase
     def visit_padstack_instance(self, padstack_instance: PadstackInstance):
         position_and_rotation = padstack_instance.get_position_and_rotation()
+        layer_range = []
+        try:
+            layer_range = padstack_instance.get_layer_range()
+        except Exception as e:
+            if self.logger is not None:
+                self.logger.warning(
+                    f"Could not get layer range for padstack instance {padstack_instance.name}: {e}"
+                )
+
         return OrderedDict(
             {
                 "net_name": padstack_instance.net.name if padstack_instance.net is not None else "",
@@ -313,7 +333,7 @@ class EdbObjVisitor(VisitorBase):
                 "position": (position_and_rotation[0], position_and_rotation[1]),
                 "rotation": position_and_rotation[2],
                 "padstack_def": padstack_instance.padstack_def,
-                "layer_range": [layer.name for layer in padstack_instance.get_layer_range()],
+                "layer_range": [layer.name for layer in layer_range],
                 "hole_overrides": padstack_instance.get_hole_overrides(),
                 "is_layout_pin": padstack_instance.is_layout_pin,
                 "group": padstack_instance.group,
