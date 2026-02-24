@@ -27,7 +27,7 @@ from ansys.edb.core.primitive.rectangle import Rectangle
 
 class VisitorBase(ABC):
     @abstractmethod
-    def set_visit_types(self, visit_types: dict):
+    def set_visit_rules(self, rules: dict):
         pass
 
     @abstractmethod
@@ -56,15 +56,64 @@ class EdbObjVisitor(VisitorBase):
             Structure3D: self.visit_structure3d,
             ViaGroup: self.visit_via_group,
         }
+        
+        self.visit_rules = {
+            Database: [],
+            MaterialDef: [],
+            PadstackDef: [],
+            PadstackDefData: [],
+            ComponentDef: [],
+            ComponentModel: [],
+            Cell: [],
+            Layout: [],
+            Primitive: [],
+            Rectangle: [],
+            Circle: [],
+            Polygon: [],
+            PolygonData: [],
+            Path: [],
+            PadstackInstance: [],
+            HierarchyObj: [],
+            ComponentGroup: [],
+            Structure3D: [],
+            ViaGroup: [],
+        }
 
-    def set_visit_types(self, visit_types: dict):
-        excluded_types = [
-            edb_obj
-            for edb_obj, _ in self.visit_map.items()
-            if not visit_types.get(edb_obj.__name__, False)
-        ]
-        for edb_obj in excluded_types:
-            self.visit_map.pop(edb_obj)
+        self.property_extractors = {
+            "material_properties": self.visit_material_properties,
+            "pad_parameters": self.visit_pad_parameters,
+            "primitives": lambda obj: self.visit_primitives(obj.primitives) if hasattr(obj, "primitives") else None,
+            "groups": lambda obj: self.visit_groups(obj.groups) if hasattr(obj, "groups") else None,
+            "net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None,
+            "layer_name": lambda obj: obj.layer.name if hasattr(obj, "layer") and obj.layer is not None else None,
+            "owner": lambda obj: obj.owner.id if hasattr(obj, "owner") and obj.owner is not None else None,
+            "voids": lambda obj: self.visit_primitives(obj.voids) if hasattr(obj, "has_voids") and obj.has_voids else None,
+            "parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None,
+            "polygon_data": lambda obj: self.visit_polygon_data(obj.polygon_data) if hasattr(obj, "polygon_data") else None,
+            "center_line": lambda obj: self.visit_polygon_data(obj.center_line) if hasattr(obj, "center_line") else None,
+            "outline": lambda obj: self.visit_polygon_data(obj.outline) if hasattr(obj, "outline") else None,
+        }
+    
+    def set_visit_rules(self, rules):
+        for edb_obj, _ in self.visit_rules.items():
+            self.visit_rules[edb_obj] = rules.get(edb_obj.__name__, [])
+    
+    def visit_properties(self, obj, obj_type):
+        properties = OrderedDict()
+        for prop in self.visit_rules.get(obj_type, []):
+            if prop in self.property_extractors:
+                try:
+                    properties[prop] = self.property_extractors[prop](obj)
+                except Exception as e:
+                    if self.logger is not None:
+                        self.logger.warning(f"Failed to extract property {prop} from {obj_type.__name__}: {e}")
+                continue
+
+            if hasattr(obj, prop):
+                properties[prop] = getattr(obj, prop)
+            else:
+                self.logger.warning(f"{obj_type.__name__} object does not have property {prop}")
+        return properties
 
     def visit(self, edb_obj):
         visitor = self.visit_map.get(type(edb_obj), None)
@@ -94,22 +143,13 @@ class EdbObjVisitor(VisitorBase):
 
     @visit_objbase
     def visit_database(self, database: Database):
-        return OrderedDict(
-            {
-                "directory": database.directory,
-                "version": database.version,
-                "source": database.source,
-                "source_version": database.source_version,
-                "material_defs": database.material_defs if MaterialDef in self.visit_map else [],
-                "padstack_defs": database.padstack_defs if PadstackDef in self.visit_map else [],
-                "component_defs": database.component_defs if ComponentDef in self.visit_map else [],
-                "circuit_cells": database.circuit_cells if Cell in self.visit_map else [],
-                "footprint_cells": database.footprint_cells,
-            }
-        )
+        return self.visit_properties(database, Database)
 
     @visit_objbase
     def visit_material_def(self, material_def: MaterialDef):
+        return self.visit_properties(material_def, MaterialDef)
+    
+    def visit_material_properties(self, material_def: MaterialDef):
         material_properties = OrderedDict()
         for material_property in material_def.all_properties:
             row, col = material_def.get_dimensions(material_property)
@@ -118,32 +158,15 @@ class EdbObjVisitor(VisitorBase):
                 for c in range(col):
                     values.append(material_def.get_property(material_property, r, c))
             material_properties[material_property.name] = values
-
-        return OrderedDict(
-            {
-                "name": material_def.name,
-                "material_properties": material_properties,
-            }
-        )
+        return material_properties
 
     @visit_objbase
     def visit_padstack_def(self, padstack_def: PadstackDef):
-        return OrderedDict(
-            {
-                "name": padstack_def.name,
-                "data": padstack_def.data if PadstackDefData in self.visit_map else None,
-            }
-        )
+        return self.visit_properties(padstack_def, PadstackDef)
 
     @visit_objbase
     def visit_padstack_def_data(self, padstack_def_data: PadstackDefData):
-        return OrderedDict(
-            {
-                "material": padstack_def_data.material,
-                "layer_names": padstack_def_data.layer_names,
-                "pad_parameters": self.visit_pad_parameters(padstack_def_data),
-            }
-        )
+        return self.visit_properties(padstack_def_data, PadstackDefData)
 
     def visit_pad_parameters(self, padstack_def_data: PadstackDefData):
         params = OrderedDict()
@@ -166,67 +189,36 @@ class EdbObjVisitor(VisitorBase):
 
     @visit_objbase
     def visit_component_def(self, component_def: ComponentDef):
-        return OrderedDict(
-            {
-                "name": component_def.name,
-                "component_models": component_def.component_models,
-            }
-        )
+        return self.visit_properties(component_def, ComponentDef)
 
     @visit_objbase
     def visit_component_model(self, component_model: ComponentModel):
-        return OrderedDict(
-            {
-                "reference_file": component_model.reference_file,
-                "name": component_model.name,
-                "component_model_type": component_model.component_model_type,
-            }
-        )
+        return self.visit_properties(component_model, ComponentModel)
 
     @visit_objbase
     def visit_cell(self, cell: Cell):
-        return OrderedDict(
-            {
-                "layout": cell.layout,
-                "is_footprint": cell.is_footprint,
-                "is_blackbox": cell.is_blackbox,
-                "suppress_pads": cell.suppress_pads,
-                "anti_pads_always_on": cell.anti_pads_always_on,
-                "anti_pads_option": cell.anti_pads_option,
-                "is_symbolic_footprint": cell.is_symbolic_footprint,
-                "name": cell.name,
-                "design_mode": cell.design_mode,
-            }
-        )
+        return self.visit_properties(cell, Cell)
 
     @visit_objbase
     def visit_layout(self, layout: Layout):
-        return OrderedDict(
-            {
-                "primitives": self.visit_primitives(layout.primitives)
-                if any(prim in self.visit_map for prim in [Rectangle, Circle, Polygon, Path])
-                else {},
-                "padstack_instances": layout.padstack_instances
-                if PadstackInstance in self.visit_map
-                else [],
-                "groups": self.visit_groups(layout.groups)
-                if any(grp in self.visit_map for grp in [ComponentGroup, Structure3D, ViaGroup])
-                else {},
-            }
-        )
+        return self.visit_properties(layout, Layout)
 
     def visit_primitives(self, primitives: list[Primitive]):
         prims = {"rectangles": [], "circles": [], "polygons": [], "paths": []}
+        visit_prim_types = [prim for prim in [Rectangle, Circle, Polygon, Path] if len(self.visit_rules.get(prim, [])) > 0]
+        if len(visit_prim_types) == 0:
+            return prims
+        
         for primitive in primitives:
             try:
                 layer = primitive.layer.is_null
-                if Rectangle in self.visit_map and isinstance(primitive, Rectangle):
+                if Rectangle in visit_prim_types and isinstance(primitive, Rectangle):
                     prims["rectangles"].append(primitive)
-                elif Circle in self.visit_map and isinstance(primitive, Circle):
+                elif Circle in visit_prim_types and isinstance(primitive, Circle):
                     prims["circles"].append(primitive)
-                elif Polygon in self.visit_map and isinstance(primitive, Polygon):
+                elif Polygon in visit_prim_types and isinstance(primitive, Polygon):
                     prims["polygons"].append(primitive)
-                elif Path in self.visit_map and isinstance(primitive, Path):
+                elif Path in visit_prim_types and isinstance(primitive, Path):
                     prims["paths"].append(primitive)
             except Exception as e:
                 if self.logger is not None:
@@ -237,30 +229,8 @@ class EdbObjVisitor(VisitorBase):
     def visit_primitive(func):
         @wraps(func)
         def wrapper(self, primitive: Primitive):
-            primitive_properties = OrderedDict(
-                {
-                    "net_name": primitive.net.name if primitive.net is not None else "",
-                    "primitive_type": primitive.primitive_type,
-                    "layer_name": primitive.layer.name,
-                    "is_negative": primitive.is_negative,
-                    "is_void": primitive.is_void,
-                    "has_voids": primitive.has_voids,
-                    "owner": primitive.owner,
-                    "is_parameterized": primitive.is_parameterized,
-                    "is_zone_primitive": primitive.is_zone_primitive,
-                    "can_be_zone_primitive": primitive.can_be_zone_primitive,
-                }
-            )
-
-            if primitive.is_void:
-                primitive_properties.update(
-                    {
-                        "voids:": self.visit_primitives(primitive.voids),
-                    }
-                )
-
+            primitive_properties = self.visit_properties(primitive, Primitive)
             properties = func(self, primitive)
-
             if isinstance(properties, dict):
                 primitive_properties.update(properties)
 
@@ -271,48 +241,25 @@ class EdbObjVisitor(VisitorBase):
     @visit_objbase
     @visit_primitive
     def visit_rectangle(self, rectangle: Rectangle):
-        return OrderedDict(
-            {
-                "parameters": rectangle.get_parameters(),
-            }
-        )
+        return self.visit_properties(rectangle, Rectangle)
 
     @visit_objbase
     @visit_primitive
     def visit_circle(self, circle: Circle):
-        return OrderedDict(
-            {
-                "parameters": circle.get_parameters(),
-            }
-        )
+        return self.visit_properties(circle, Circle)
 
     @visit_objbase
     @visit_primitive
     def visit_polygon(self, polygon: Polygon):
-        return OrderedDict(
-            {
-                "polygon_data": self.visit_polygon_data(polygon.polygon_data),
-            }
-        )
+        return self.visit_properties(polygon, Polygon)
 
     def visit_polygon_data(self, polygon_data: PolygonData):
-        return OrderedDict(
-            {
-                "points": polygon_data.points,
-                "is_closed": polygon_data.is_closed,
-                "sense": polygon_data.sense,
-            }
-        )
+        return self.visit_properties(polygon_data, PolygonData)
 
     @visit_objbase
     @visit_primitive
     def visit_path(self, path: Path):
-        return OrderedDict(
-            {
-                "center_line": self.visit_polygon_data(path.center_line),
-                "width": path.width,
-            }
-        )
+        return self.visit_properties(path, Path)
 
     @visit_objbase
     def visit_padstack_instance(self, padstack_instance: PadstackInstance):
@@ -342,14 +289,15 @@ class EdbObjVisitor(VisitorBase):
 
     def visit_groups(self, groups: list[Group]):
         grps = {"component_groups": [], "structure3d_groups": [], "via_groups": []}
+        visit_group_types = [grp for grp in [ComponentGroup, Structure3D, ViaGroup] if len(self.visit_rules.get(grp, [])) > 0]
         for group in groups:
             try:
                 grp = group.cast()
-                if ComponentGroup in self.visit_map and isinstance(grp, ComponentGroup):
+                if ComponentGroup in visit_group_types and isinstance(grp, ComponentGroup):
                     grps["component_groups"].append(grp)
-                elif Structure3D in self.visit_map and isinstance(grp, Structure3D):
+                elif Structure3D in visit_group_types and isinstance(grp, Structure3D):
                     grps["structure3d_groups"].append(grp)
-                elif ViaGroup in self.visit_map and isinstance(grp, ViaGroup):
+                elif ViaGroup in visit_group_types and isinstance(grp, ViaGroup):
                     grps["via_groups"].append(grp)
             except Exception as e:
                 continue
@@ -358,20 +306,8 @@ class EdbObjVisitor(VisitorBase):
     def visit_hierarchy_obj(func):
         @wraps(func)
         def wrapper(self, hierarchy_obj: HierarchyObj):
-            hierarchy_obj_properties = OrderedDict(
-                {
-                    "net_name": hierarchy_obj.net.name if hierarchy_obj.net is not None else "",
-                    "transform": hierarchy_obj.transform,
-                    "name": hierarchy_obj.name,
-                    "component_def": hierarchy_obj.component_def,
-                    "placement_layer": hierarchy_obj.placement_layer,
-                    "location": hierarchy_obj.location,
-                    "solve_independent_preference": hierarchy_obj.solve_independent_preference,
-                }
-            )
-
+            hierarchy_obj_properties = self.visit_properties(hierarchy_obj, HierarchyObj)
             properties = func(self, hierarchy_obj)
-
             if isinstance(properties, dict):
                 hierarchy_obj_properties.update(properties)
 
@@ -382,13 +318,7 @@ class EdbObjVisitor(VisitorBase):
     @visit_objbase
     @visit_hierarchy_obj
     def visit_component_group(self, component_group: ComponentGroup):
-        return OrderedDict(
-            {
-                "num_pins": component_group.num_pins,
-                "component_property": component_group.component_property,
-                "component_type": component_group.component_type,
-            }
-        )
+        return self.visit_properties(component_group, ComponentGroup)
 
     @visit_objbase
     @visit_hierarchy_obj
@@ -404,10 +334,4 @@ class EdbObjVisitor(VisitorBase):
     @visit_objbase
     @visit_hierarchy_obj
     def visit_via_group(self, via_group: ViaGroup):
-        return OrderedDict(
-            {
-                "outline": self.visit_polygon_data(via_group.outline),
-                "conductor_percentage": via_group.conductor_percentage,
-                "persistent": via_group.persistent,
-            }
-        )
+        return self.visit_properties(via_group, ViaGroup)

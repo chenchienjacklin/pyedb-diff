@@ -12,9 +12,9 @@ def main():
     parser.add_argument(
         "--edb_diff_config", required=False, help="Path to the EDB diff configuration YAML file"
     )
-    parser.add_argument("--edb_path1", required=True, help="")
-    parser.add_argument("--edb_path2", required=True, help="")
-    parser.add_argument("--output_file", required=True, help="Path to output diff file")
+    parser.add_argument("edb_path1", help="Path to the first EDB file")
+    parser.add_argument("edb_path2", help="Path to the second EDB file")
+    parser.add_argument("output_file", help="Path to output diff file")
 
     args = parser.parse_args()
 

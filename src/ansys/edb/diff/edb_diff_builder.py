@@ -20,7 +20,7 @@ class EdbDiffBuilderBase:
         self.port = 0
         self.enable_io_manager = False
         self.debug = False
-        self.visit_types = {}
+        self.visit_rules = {}
         self.match_rules = {}
         self.logger = None
 
@@ -56,7 +56,7 @@ class EdbDiffBuilderBase:
             self.port = data.get("port", self.port)
             self.enable_io_manager = data.get("enable_io_manager", self.enable_io_manager)
             self.debug = data.get("debug", self.debug)
-            self.visit_types = data.get("visit_types", self.visit_types)
+            self.visit_rules = data.get("visit_rules", self.visit_rules)
             self.match_rules = data.get("match_rules", self.match_rules)
             return True
         except Exception as e:
@@ -82,8 +82,8 @@ class EdbDiffBuilderBase:
             raise ValueError("EDB Diff Builder configuration is invalid.")
         self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
         visitor = EdbObjVisitor(self.logger)
-        if len(self.visit_types) > 0:
-            visitor.set_visit_types(self.visit_types)
+        if len(self.visit_rules) > 0:
+            visitor.set_visit_rules(self.visit_rules)
         matcher = EdbObjMatcher(self.logger)
         if len(self.match_rules) > 0:
             matcher.set_match_rules(self.match_rules)

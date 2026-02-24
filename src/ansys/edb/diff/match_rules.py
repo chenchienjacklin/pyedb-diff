@@ -59,22 +59,13 @@ class MatchByLayerName(MatchRule):
 class MatchByRectangleProperties(MatchRule):
     @staticmethod
     def is_match(item1, item2):
-        return (
-            item1.center_x == item2.center_x
-            and item1.center_y == item2.center_y
-            and item1.width == item2.width
-            and item1.height == item2.height
-        )
+        return item1.get_parameters() == item2.get_parameters()
 
 
 class MatchByCircleProperties(MatchRule):
     @staticmethod
     def is_match(item1, item2):
-        return (
-            item1.center_x == item2.center_x
-            and item1.center_y == item2.center_y
-            and item1.radius == item2.radius
-        )
+        return item1.get_parameters() == item2.get_parameters()
 
 
 class MatchByPolygonProperties(MatchRule):

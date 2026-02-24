@@ -3,7 +3,7 @@ from contextlib import nullcontext
 from time import time
 
 from ansys.edb.core.database import Database
-from ansys.edb.core.session import attach_session
+from ansys.edb.core.session import session
 from ansys.edb.core.utility.io_manager import IOMangementType, enable_io_manager
 
 from ansys.edb.diff.comparator import ComparatorBase
@@ -30,15 +30,13 @@ class EdbDiff:
         self.logger = logger
 
     def execute(self, edb_path1: str, edb_path2: str, output_file: str = ""):
-        session = attach_session(self.host, self.port)
-        with enable_io_manager(IOMangementType.READ) if self.enable_io_manager else nullcontext():
-            start = time()
-            self._execute(edb_path1, edb_path2, output_file)
-            end = time()
-            if self.logger is not None:
-                self.logger.info(f"EDB diff execution time: {end - start:.2f} seconds")
-        if session:
-            session.disconnect()
+        with session(self.ansys_em_root, self.port):
+            with enable_io_manager(IOMangementType.READ) if self.enable_io_manager else nullcontext():
+                start = time()
+                self._execute(edb_path1, edb_path2, output_file)
+                end = time()
+                if self.logger is not None:
+                    self.logger.info(f"EDB diff execution time: {end - start:.2f} seconds")
 
     def _execute(self, edb_path1: str, edb_path2: str, output_file: str = ""):
         edb1 = None

@@ -5,23 +5,93 @@ port: 50065
 enable_io_manager: true
 debug: true
 
-visit_types:
-  Database: true
-  MaterialDef: true
-  PadstackDef: true
-  PadstackDefData: true
-  ComponentDef: true
-  ComponentModel: true
-  Cell: true
-  Layout: true
-  Rectangle: true
-  Circle: true
-  Polygon: true
-  Path: true
-  PadstackInstance: true
-  ComponentGroup: true
-  Structure3D: true
-  ViaGroup: true
+visit_rules:
+  Database:
+    - directory
+    - version
+    - source
+    - source_version
+    - material_defs
+    - padstack_defs
+    - component_defs
+    - circuit_cells
+    # - footprint_cells
+  MaterialDef:
+    - name
+    - material_properties
+  PadstackDef:
+    - name
+    - data
+  PadstackDefData:
+    - material
+    - layer_names
+    - pad_parameters
+  ComponentDef:
+    - name
+    - component_models
+  ComponentModel:
+    - reference_file
+    - name
+    - component_model_type
+  Cell:
+    - layout
+    - is_footprint
+    - is_blackbox
+    - suppress_pads
+    - anti_pads_always_on
+    - anti_pads_option
+    - is_symbolic_footprint
+    - name
+    - design_mode
+  Layout:
+    - primitives
+    - padstack_instances
+    - groups
+  Primitive:
+    - net_name
+    - primitive_type
+    - layer_name
+    - is_negative
+    - is_void
+    - has_voids
+    - owner
+    - is_parameterized
+    - is_zone_primitive
+    # - can_be_zone_primitive
+    - voids
+  Rectangle:
+    - parameters
+  Circle:
+    - parameters
+  Polygon:
+    - polygon_data
+  PolygonData:
+    - points
+    - is_closed
+    - sense
+  Path:
+    - center_line
+    - width
+  HierarchyObj:
+    - net_name
+    - transform
+    - name
+    - component_def
+    - placement_layer
+    - location
+    - solve_independent_preference
+  ComponentGroup:
+    - num_pins
+    - component_property
+    - component_type
+  Structure3D:
+    - material
+    - thickness
+    - mesh_closure
+  ViaGroup:
+    - outline
+    - conductor_percentage
+    - persistent
 
 match_rules:
   MaterialDef: [MatchByName]
