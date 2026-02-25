@@ -14,12 +14,18 @@ visit_rules:
     - material_defs
     - padstack_defs
     - component_defs
+    - apd_bondwire_defs
+    - jedec4_bondwire_defs
+    - jedec5_bondwire_defs
+    - package_defs
     - circuit_cells
     # - footprint_cells
   MaterialDef:
+    - definition_type
     - name
     - material_properties
   PadstackDef:
+    - definition_type
     - name
     - data
   PadstackDefData:
@@ -27,12 +33,31 @@ visit_rules:
     - layer_names
     - pad_parameters
   ComponentDef:
+    - definition_type
     - name
+    # - footprint
     - component_models
+    # - component_pins
   ComponentModel:
     - reference_file
     - name
     - component_model_type
+  BondwireDef:
+    - definition_type
+    - name
+    - parameters
+    - bondwire_type
+  PackageDef:
+    - definition_type
+    - name
+    - exterior_boundary
+    - height
+    - operating_power
+    - maximum_power
+    - thermal_conductivity
+    - theta_jb
+    - theta_jc
+    - heat_sink
   Cell:
     - layout
     - is_footprint
@@ -98,6 +123,7 @@ match_rules:
   PackageDef: [MatchByName]
   ComponentDef: [MatchByName]
   PadstackDef: [MatchByName]
+  ApdBondwireDef: [MatchByName]
   Cell: [MatchByName]
   Rectangle: [MatchByLayerName, MatchByRectangleProperties]
   Circle: [MatchByLayerName, MatchByCircleProperties]

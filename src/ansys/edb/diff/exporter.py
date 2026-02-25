@@ -8,7 +8,7 @@ class ExporterBase(ABC):
         pass
 
 
-class EdbDiffExporter(ExporterBase):
+class EdbDiffExporterV1(ExporterBase):
     def __init__(self, logger=None):
         self.logger = logger
 

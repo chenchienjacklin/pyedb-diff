@@ -4,16 +4,17 @@ from pathlib import Path
 
 from yaml import safe_load
 
-from ansys.edb.diff.comparator import EdbComparator
+from ansys.edb.diff.comparator import EdbComparatorV1
+from ansys.edb.diff.exporter import EdbDiffExporterV1
+from ansys.edb.diff.filter import EdbDiffFilterV1
+from ansys.edb.diff.matcher import EdbObjMatcherV1
+from ansys.edb.diff.visitor import EdbObjVisitorV1
 from ansys.edb.diff.edb_diff import EdbDiff
-from ansys.edb.diff.exporter import EdbDiffExporter
-from ansys.edb.diff.filter import EdbDiffFilter
-from ansys.edb.diff.matcher import EdbObjMatcher
-from ansys.edb.diff.visitor import EdbObjVisitor
 
 
 class EdbDiffBuilderBase:
     def __init__(self):
+        self.version = None 
         self.ansys_em_root = ""
         self.config_file = Path(__file__).resolve().parent / "config" / "edb-diff-config.yaml"
         self.host = ""
@@ -23,18 +24,6 @@ class EdbDiffBuilderBase:
         self.visit_rules = {}
         self.match_rules = {}
         self.logger = None
-
-    def set_ansys_em_root(self, ansys_em_root: str):
-        self.ansys_em_root = ansys_em_root
-        return self
-
-    def set_host(self, host: str):
-        self.host = host
-        return self
-
-    def set_port(self, port: int):
-        self.port = port
-        return self
 
     def set_logger(self, logger):
         self.logger = logger
@@ -51,6 +40,7 @@ class EdbDiffBuilderBase:
                 raise FileNotFoundError(f"Config file {self.config_file} does not exist.")
             with open(self.config_file, "r") as f:
                 data = safe_load(f) or {}
+            self.version = data.get("version", self.version)
             self.ansys_em_root = data.get("ansys_em_root", self.ansys_em_root)
             self.host = data.get("host", self.host)
             self.port = data.get("port", self.port)
@@ -65,6 +55,8 @@ class EdbDiffBuilderBase:
             return False
 
     def validate(self) -> bool:
+        if self.version is None:
+            raise ValueError("Version is not set.")
         if self.ansys_em_root == "":
             raise ValueError("Ansys EM root path is not set.")
         if self.host == "":
@@ -80,15 +72,23 @@ class EdbDiffBuilderBase:
             raise ValueError("Failed to load EDB Diff configuration file.")
         if not self.validate():
             raise ValueError("EDB Diff Builder configuration is invalid.")
+        
         self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
-        visitor = EdbObjVisitor(self.logger)
+        
+        if self.version == 1.0:
+            return self._build_v1()
+        else:
+            raise ValueError(f"Unsupported EDB Diff version: {self.version}")
+
+    def _build_v1(self) -> EdbDiff:
+        visitor = EdbObjVisitorV1(self.logger)
         if len(self.visit_rules) > 0:
             visitor.set_visit_rules(self.visit_rules)
-        matcher = EdbObjMatcher(self.logger)
+        matcher = EdbObjMatcherV1(self.logger)
         if len(self.match_rules) > 0:
             matcher.set_match_rules(self.match_rules)
-        comparator = EdbComparator(visitor, matcher, [EdbDiffFilter(self.logger)], self.logger)
-        exporter = EdbDiffExporter(self.logger)
+        comparator = EdbComparatorV1(visitor, matcher, [EdbDiffFilterV1(self.logger)], self.logger)
+        exporter = EdbDiffExporterV1(self.logger)
         edb_diff = EdbDiff(
             self.ansys_em_root,
             self.host,

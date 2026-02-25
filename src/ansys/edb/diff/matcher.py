@@ -37,7 +37,7 @@ class MatcherBase(ABC):
         pass
 
 
-class EdbObjMatcher(MatcherBase):
+class EdbObjMatcherV1(MatcherBase):
     def __init__(self, logger=None):
         self.logger = logger
         self.match_rules = {}

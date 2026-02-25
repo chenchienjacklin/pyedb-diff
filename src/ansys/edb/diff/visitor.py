@@ -8,6 +8,8 @@ from ansys.edb.core.definition.component_model import ComponentModel
 from ansys.edb.core.definition.material_def import MaterialDef
 from ansys.edb.core.definition.padstack_def import PadstackDef, PadstackDefData
 from ansys.edb.core.definition.padstack_def_data import PadType
+from ansys.edb.core.definition.bondwire_def import BondwireDef, ApdBondwireDef, Jedec4BondwireDef, Jedec5BondwireDef
+from ansys.edb.core.definition.package_def import PackageDef
 from ansys.edb.core.geometry.polygon_data import PolygonData
 from ansys.edb.core.hierarchy.component_group import ComponentGroup
 from ansys.edb.core.hierarchy.group import Group
@@ -35,7 +37,7 @@ class VisitorBase(ABC):
         pass
 
 
-class EdbObjVisitor(VisitorBase):
+class EdbObjVisitorV1(VisitorBase):
     def __init__(self, logger=None):
         self.logger = logger
         self.visit_map = {
@@ -45,6 +47,10 @@ class EdbObjVisitor(VisitorBase):
             PadstackDefData: self.visit_padstack_def_data,
             ComponentDef: self.visit_component_def,
             ComponentModel: self.visit_component_model,
+            ApdBondwireDef: self.visit_bondwire_def,
+            Jedec4BondwireDef: self.visit_bondwire_def,
+            Jedec5BondwireDef: self.visit_bondwire_def,
+            PackageDef: self.visit_package_def,
             Cell: self.visit_cell,
             Layout: self.visit_layout,
             Rectangle: self.visit_rectangle,
@@ -57,6 +63,7 @@ class EdbObjVisitor(VisitorBase):
             ViaGroup: self.visit_via_group,
         }
         
+        # Initialize visit rules with empty lists for all EDB object types
         self.visit_rules = {
             Database: [],
             MaterialDef: [],
@@ -64,6 +71,8 @@ class EdbObjVisitor(VisitorBase):
             PadstackDefData: [],
             ComponentDef: [],
             ComponentModel: [],
+            BondwireDef: [],
+            PackageDef: [],
             Cell: [],
             Layout: [],
             Primitive: [],
@@ -79,36 +88,43 @@ class EdbObjVisitor(VisitorBase):
             ViaGroup: [],
         }
 
-        self.property_extractors = {
-            "material_properties": self.visit_material_properties,
-            "pad_parameters": self.visit_pad_parameters,
-            "primitives": lambda obj: self.visit_primitives(obj.primitives) if hasattr(obj, "primitives") else None,
-            "groups": lambda obj: self.visit_groups(obj.groups) if hasattr(obj, "groups") else None,
-            "net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None,
-            "layer_name": lambda obj: obj.layer.name if hasattr(obj, "layer") and obj.layer is not None else None,
-            "owner": lambda obj: obj.owner.id if hasattr(obj, "owner") and obj.owner is not None else None,
-            "voids": lambda obj: self.visit_primitives(obj.voids) if hasattr(obj, "has_voids") and obj.has_voids else None,
-            "parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None,
-            "polygon_data": lambda obj: self.visit_polygon_data(obj.polygon_data) if hasattr(obj, "polygon_data") else None,
-            "center_line": lambda obj: self.visit_polygon_data(obj.center_line) if hasattr(obj, "center_line") else None,
-            "outline": lambda obj: self.visit_polygon_data(obj.outline) if hasattr(obj, "outline") else None,
+        self.visit_functions = {
+            MaterialDef: {"material_properties": self.visit_material_properties},
+            PadstackDefData: {"pad_parameters": self.visit_pad_parameters},
+            BondwireDef: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
+            PackageDef: {"exterior_boundary": lambda obj: self.visit_polygon_data(obj.exterior_boundary) if hasattr(obj, "exterior_boundary") else None},
+            Layout: {"primitives": lambda obj: self.visit_primitives(obj.primitives) if hasattr(obj, "primitives") else None,
+                     "groups": lambda obj: self.visit_groups(obj.groups) if hasattr(obj, "groups") else None},
+            Primitive: {"net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None,
+                        "layer_name": lambda obj: obj.layer.name if hasattr(obj, "layer") and obj.layer is not None else None,
+                        "owner": lambda obj: obj.owner.id if hasattr(obj, "owner") and obj.owner is not None else None,
+                        "voids": lambda obj: self.visit_primitives(obj.voids) if hasattr(obj, "has_voids") and obj.has_voids else None},
+            Rectangle: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
+            Circle: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
+            Polygon: {"polygon_data": lambda obj: self.visit_polygon_data(obj.polygon_data) if hasattr(obj, "polygon_data") else None},
+            Path: {"center_line": lambda obj: self.visit_polygon_data(obj.center_line) if hasattr(obj, "center_line") else None},
+            HierarchyObj: {"net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None},
+            Structure3D: {"material": lambda obj: obj.get_material(evaluate=True) if hasattr(obj, "get_material") else None},
+            ViaGroup: {"outline": lambda obj: self.visit_polygon_data(obj.outline) if hasattr(obj, "outline") else None},
         }
-    
+
     def set_visit_rules(self, rules):
         for edb_obj, _ in self.visit_rules.items():
             self.visit_rules[edb_obj] = rules.get(edb_obj.__name__, [])
     
     def visit_properties(self, obj, obj_type):
         properties = OrderedDict()
+        visit_funcs = self.visit_functions.get(obj_type, {})
         for prop in self.visit_rules.get(obj_type, []):
-            if prop in self.property_extractors:
+            visit_func = visit_funcs.get(prop, None)
+            if visit_func is not None:
                 try:
-                    properties[prop] = self.property_extractors[prop](obj)
+                    properties[prop] = visit_func(obj)
                 except Exception as e:
                     if self.logger is not None:
-                        self.logger.warning(f"Failed to extract property {prop} from {obj_type.__name__}: {e}")
+                        self.logger.warning(f"Failed to visit property {prop} for {obj_type.__name__}: {e}")
                 continue
-
+            
             if hasattr(obj, prop):
                 properties[prop] = getattr(obj, prop)
             else:
@@ -194,6 +210,14 @@ class EdbObjVisitor(VisitorBase):
     @visit_objbase
     def visit_component_model(self, component_model: ComponentModel):
         return self.visit_properties(component_model, ComponentModel)
+
+    @visit_objbase
+    def visit_bondwire_def(self, bondwire_def: BondwireDef):
+        return self.visit_properties(bondwire_def, BondwireDef)
+    
+    @visit_objbase
+    def visit_package_def(self, package_def: PackageDef):
+        return self.visit_properties(package_def, PackageDef)
 
     @visit_objbase
     def visit_cell(self, cell: Cell):
@@ -323,14 +347,8 @@ class EdbObjVisitor(VisitorBase):
     @visit_objbase
     @visit_hierarchy_obj
     def visit_structure3d(self, structure3d: Structure3D):
-        return OrderedDict(
-            {
-                "material": structure3d.get_material(evaluate=True),
-                "thickness": structure3d.thickness,
-                "mesh_closure": structure3d.mesh_closure,
-            }
-        )
-
+        return self.visit_properties(structure3d, Structure3D)
+    
     @visit_objbase
     @visit_hierarchy_obj
     def visit_via_group(self, via_group: ViaGroup):

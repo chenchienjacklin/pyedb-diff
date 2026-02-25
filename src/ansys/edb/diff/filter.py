@@ -6,7 +6,7 @@ from ansys.edb.core.definition.component_def import ComponentDef
 from ansys.edb.core.definition.material_def import MaterialDef
 from ansys.edb.core.definition.padstack_def import PadstackDef
 from ansys.edb.core.definition.padstack_def_data import PadstackDefData
-from ansys.edb.core.definition.padstack_def_data import PadstackDefData
+from ansys.edb.core.definition.bondwire_def import BondwireDef
 from ansys.edb.core.inner.layout_obj import LayoutObj
 from ansys.edb.core.layout.cell import Cell
 
@@ -21,10 +21,10 @@ class FilterBase(ABC):
         pass
 
 
-class EdbDiffFilter(FilterBase):
+class EdbDiffFilterV1(FilterBase):
     def __init__(self, logger=None):
         self.logger = logger
-        self.obj_types = [Database, MaterialDef, PadstackDef, PadstackDefData, ComponentDef, Cell, LayoutObj]
+        self.obj_types = [Database, MaterialDef, PadstackDef, PadstackDefData, ComponentDef, BondwireDef, Cell, LayoutObj]
         self.skip_properties = ["id", "owner"]
         self.reserved_properties = ["id", "name", "owner"]
 
@@ -56,13 +56,17 @@ class EdbDiffFilter(FilterBase):
                     if key not in self.reserved_properties:
                         filter_keys.append(key)
             elif isinstance(val, list):
+                is_list_equal = True
                 for item in val:
                     if not self._execute(item):
-                        is_equal = False
+                        is_list_equal = False
                         break
                 
-                if is_equal and key not in self.reserved_properties:
-                    filter_keys.append(key)
+                if not is_list_equal:
+                    is_equal = False
+                else:
+                    if key not in self.reserved_properties:
+                        filter_keys.append(key)
 
         if not is_equal:
             for key in filter_keys:

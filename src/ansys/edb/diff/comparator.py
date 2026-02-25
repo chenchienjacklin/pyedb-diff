@@ -5,8 +5,8 @@ from enum import Enum
 from ansys.edb.core.inner.base import ObjBase
 
 from ansys.edb.diff.filter import FilterBase
-from ansys.edb.diff.matcher import EdbObjMatcher
-from ansys.edb.diff.visitor import EdbObjVisitor
+from ansys.edb.diff.matcher import MatcherBase
+from ansys.edb.diff.visitor import VisitorBase
 
 
 class ComparatorBase(ABC):
@@ -19,9 +19,9 @@ class ComparatorBase(ABC):
         pass
 
 
-class EdbComparator(ComparatorBase):
+class EdbComparatorV1(ComparatorBase):
     def __init__(
-        self, visitor: EdbObjVisitor, matcher: EdbObjMatcher, filters: list[FilterBase], logger=None
+        self, visitor: VisitorBase, matcher: MatcherBase, filters: list[FilterBase], logger=None
     ):
         super().__init__()
         self.logger = logger
