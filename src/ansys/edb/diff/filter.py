@@ -1,17 +1,13 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 
-from ansys.edb.core.database import Database
-from ansys.edb.core.definition.component_def import ComponentDef
-from ansys.edb.core.definition.material_def import MaterialDef
-from ansys.edb.core.definition.padstack_def import PadstackDef
-from ansys.edb.core.definition.padstack_def_data import PadstackDefData
-from ansys.edb.core.definition.bondwire_def import BondwireDef
-from ansys.edb.core.inner.layout_obj import LayoutObj
-from ansys.edb.core.layout.cell import Cell
-
+from ansys.edb.core.inner.base import ObjBase
 
 class FilterBase(ABC):
+    @abstractmethod
+    def set_filter_rules(self, rules: dict):
+        pass
+
     @abstractmethod
     def is_applicable(self, edb_obj_type) -> bool:
         pass
@@ -24,12 +20,16 @@ class FilterBase(ABC):
 class EdbDiffFilterV1(FilterBase):
     def __init__(self, logger=None):
         self.logger = logger
-        self.obj_types = [Database, MaterialDef, PadstackDef, PadstackDefData, ComponentDef, BondwireDef, Cell, LayoutObj]
-        self.skip_properties = ["id", "owner"]
-        self.reserved_properties = ["id", "name", "owner"]
+        self.filter_rules = {
+            ObjBase: {}
+        }
+    
+    def set_filter_rules(self, rules: dict):
+        for edb_obj, _ in self.filter_rules.items():
+            self.filter_rules[edb_obj] = rules.get(edb_obj.__name__, {})
 
     def is_applicable(self, edb_obj_type) -> bool:
-        for obj_type in self.obj_types:
+        for obj_type in self.filter_rules:
             if issubclass(edb_obj_type, obj_type):
                 return True
         return False
@@ -37,9 +37,10 @@ class EdbDiffFilterV1(FilterBase):
     def execute(self, data: OrderedDict) -> bool:
         is_equal = True
         filter_keys = []
+        filter_rule = self.filter_rules.get(ObjBase, {})
         for value in data.items():
             key = value[0]
-            if key in self.skip_properties:
+            if key in filter_rule.get("excluded_properties", []):
                 continue
 
             val = value[1]
@@ -47,13 +48,13 @@ class EdbDiffFilterV1(FilterBase):
                 if not self._execute(val):
                     is_equal = False
                 else:
-                    if key not in self.reserved_properties:
+                    if key not in filter_rule.get("reserved_properties", []):
                         filter_keys.append(key)
             elif isinstance(val, OrderedDict):
                 if not self.execute(val):
                     is_equal = False
                 else:
-                    if key not in self.reserved_properties:
+                    if key not in filter_rule.get("reserved_properties", []):
                         filter_keys.append(key)
             elif isinstance(val, list):
                 is_list_equal = True
@@ -65,7 +66,7 @@ class EdbDiffFilterV1(FilterBase):
                 if not is_list_equal:
                     is_equal = False
                 else:
-                    if key not in self.reserved_properties:
+                    if key not in filter_rule.get("reserved_properties", []):
                         filter_keys.append(key)
 
         if not is_equal:

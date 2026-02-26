@@ -97,6 +97,20 @@ visit_rules:
   Path:
     - center_line
     - width
+  PrimitiveInstanceCollection:
+    - geometry
+    - positions
+    - instantiated_geometry
+  Bondwire:
+   - material
+   - type
+   - cross_section_type
+   - cross_section_height
+   - definition_name
+   - trajectory
+   - width
+   - start_elevation
+   - end_elevation
   HierarchyObj:
     - net_name
     - transform
@@ -105,10 +119,20 @@ visit_rules:
     - placement_layer
     - location
     - solve_independent_preference
+  Transform:
+    - scale
+    - rotation
+    - offset_x
+    - offset_y
+    - mirror
   ComponentGroup:
     - num_pins
     - component_property
     - component_type
+  ComponentProperty:
+    - package_mounting_offset
+    - package_def
+    # - model
   Structure3D:
     - material
     - thickness
@@ -131,3 +155,12 @@ match_rules:
   Path: [MatchByLayerName, MatchByPathProperties]
   PadstackInstance: [MatchByPadstackInstanceProperties]
   ComponentGroup: [MatchByName]
+
+filter_rules:
+  ObjBase:
+    excluded_properties:
+      - id
+      - owner
+    reserved_properties:
+      - id
+      - name

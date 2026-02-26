@@ -23,6 +23,7 @@ class EdbDiffBuilderBase:
         self.debug = False
         self.visit_rules = {}
         self.match_rules = {}
+        self.filter_rules = {}
         self.logger = None
 
     def set_logger(self, logger):
@@ -48,6 +49,7 @@ class EdbDiffBuilderBase:
             self.debug = data.get("debug", self.debug)
             self.visit_rules = data.get("visit_rules", self.visit_rules)
             self.match_rules = data.get("match_rules", self.match_rules)
+            self.filter_rules = data.get("filter_rules", self.filter_rules)
             return True
         except Exception as e:
             if self.logger is not None:
@@ -87,7 +89,10 @@ class EdbDiffBuilderBase:
         matcher = EdbObjMatcherV1(self.logger)
         if len(self.match_rules) > 0:
             matcher.set_match_rules(self.match_rules)
-        comparator = EdbComparatorV1(visitor, matcher, [EdbDiffFilterV1(self.logger)], self.logger)
+        filter = EdbDiffFilterV1(self.logger)
+        if len(self.filter_rules) > 0:
+            filter.set_filter_rules(self.filter_rules)
+        comparator = EdbComparatorV1(visitor, matcher, [filter], self.logger)
         exporter = EdbDiffExporterV1(self.logger)
         edb_diff = EdbDiff(
             self.ansys_em_root,

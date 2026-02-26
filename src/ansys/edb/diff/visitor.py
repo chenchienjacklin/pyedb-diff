@@ -5,6 +5,10 @@ from functools import wraps
 from ansys.edb.core.database import Database
 from ansys.edb.core.definition.component_def import ComponentDef
 from ansys.edb.core.definition.component_model import ComponentModel
+from ansys.edb.core.definition.component_property import ComponentProperty
+from ansys.edb.core.definition.ic_component_property import ICComponentProperty
+from ansys.edb.core.definition.io_component_property import IOComponentProperty
+from ansys.edb.core.definition.rlc_component_property import RLCComponentProperty
 from ansys.edb.core.definition.material_def import MaterialDef
 from ansys.edb.core.definition.padstack_def import PadstackDef, PadstackDefData
 from ansys.edb.core.definition.padstack_def_data import PadType
@@ -25,6 +29,9 @@ from ansys.edb.core.primitive.path import Path
 from ansys.edb.core.primitive.polygon import Polygon
 from ansys.edb.core.primitive.primitive import Primitive
 from ansys.edb.core.primitive.rectangle import Rectangle
+from ansys.edb.core.primitive.primitive_instance_collection import PrimitiveInstanceCollection
+from ansys.edb.core.primitive.bondwire import Bondwire
+from ansys.edb.core.utility.transform import Transform
 
 
 class VisitorBase(ABC):
@@ -56,9 +63,17 @@ class EdbObjVisitorV1(VisitorBase):
             Rectangle: self.visit_rectangle,
             Circle: self.visit_circle,
             Polygon: self.visit_polygon,
+            PolygonData: self.visit_polygon_data,
             Path: self.visit_path,
+            PrimitiveInstanceCollection: self.visit_primitive_instance_collection,
+            Bondwire: self.visit_bondwire,
+            HierarchyObj: self.visit_hierarchy_obj,
+            Transform: self.visit_transform,
             PadstackInstance: self.visit_padstack_instance,
             ComponentGroup: self.visit_component_group,
+            ICComponentProperty: self.visit_component_property,
+            IOComponentProperty: self.visit_component_property,
+            RLCComponentProperty: self.visit_component_property,
             Structure3D: self.visit_structure3d,
             ViaGroup: self.visit_via_group,
         }
@@ -81,9 +96,13 @@ class EdbObjVisitorV1(VisitorBase):
             Polygon: [],
             PolygonData: [],
             Path: [],
+            PrimitiveInstanceCollection: [],
+            Bondwire: [],
             PadstackInstance: [],
             HierarchyObj: [],
+            Transform: [],
             ComponentGroup: [],
+            ComponentProperty: [],
             Structure3D: [],
             ViaGroup: [],
         }
@@ -92,7 +111,6 @@ class EdbObjVisitorV1(VisitorBase):
             MaterialDef: {"material_properties": self.visit_material_properties},
             PadstackDefData: {"pad_parameters": self.visit_pad_parameters},
             BondwireDef: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
-            PackageDef: {"exterior_boundary": lambda obj: self.visit_polygon_data(obj.exterior_boundary) if hasattr(obj, "exterior_boundary") else None},
             Layout: {"primitives": lambda obj: self.visit_primitives(obj.primitives) if hasattr(obj, "primitives") else None,
                      "groups": lambda obj: self.visit_groups(obj.groups) if hasattr(obj, "groups") else None},
             Primitive: {"net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None,
@@ -101,11 +119,10 @@ class EdbObjVisitorV1(VisitorBase):
                         "voids": lambda obj: self.visit_primitives(obj.voids) if hasattr(obj, "has_voids") and obj.has_voids else None},
             Rectangle: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
             Circle: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
-            Polygon: {"polygon_data": lambda obj: self.visit_polygon_data(obj.polygon_data) if hasattr(obj, "polygon_data") else None},
-            Path: {"center_line": lambda obj: self.visit_polygon_data(obj.center_line) if hasattr(obj, "center_line") else None},
-            HierarchyObj: {"net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None},
+            HierarchyObj: {"net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None,
+                           "placement_layer": lambda obj: obj.placement_layer.name if hasattr(obj, "placement_layer") and obj.placement_layer is not None else None},
+            ComponentProperty: {"package_def": lambda obj: obj.package_def.name if hasattr(obj, "package_def") and not obj.package_def.is_null else None},
             Structure3D: {"material": lambda obj: obj.get_material(evaluate=True) if hasattr(obj, "get_material") else None},
-            ViaGroup: {"outline": lambda obj: self.visit_polygon_data(obj.outline) if hasattr(obj, "outline") else None},
         }
 
     def set_visit_rules(self, rules):
@@ -228,8 +245,8 @@ class EdbObjVisitorV1(VisitorBase):
         return self.visit_properties(layout, Layout)
 
     def visit_primitives(self, primitives: list[Primitive]):
-        prims = {"rectangles": [], "circles": [], "polygons": [], "paths": []}
-        visit_prim_types = [prim for prim in [Rectangle, Circle, Polygon, Path] if len(self.visit_rules.get(prim, [])) > 0]
+        prims = {"rectangles": [], "circles": [], "polygons": [], "paths": [], "primitive_instance_collections": [], "bondwires": []}
+        visit_prim_types = [prim for prim in [Rectangle, Circle, Polygon, Path, PrimitiveInstanceCollection, Bondwire] if len(self.visit_rules.get(prim, [])) > 0]
         if len(visit_prim_types) == 0:
             return prims
         
@@ -244,6 +261,10 @@ class EdbObjVisitorV1(VisitorBase):
                     prims["polygons"].append(primitive)
                 elif Path in visit_prim_types and isinstance(primitive, Path):
                     prims["paths"].append(primitive)
+                elif PrimitiveInstanceCollection in visit_prim_types and isinstance(primitive, PrimitiveInstanceCollection):
+                    prims["primitive_instance_collections"].append(primitive)
+                elif Bondwire in visit_prim_types and isinstance(primitive, Bondwire):
+                    prims["bondwires"].append(primitive)
             except Exception as e:
                 if self.logger is not None:
                     self.logger.warning(f"Skipping primitive due to error: {e}")
@@ -284,6 +305,16 @@ class EdbObjVisitorV1(VisitorBase):
     @visit_primitive
     def visit_path(self, path: Path):
         return self.visit_properties(path, Path)
+    
+    @visit_objbase
+    @visit_primitive
+    def visit_primitive_instance_collection(self, primitive_instance_collection: PrimitiveInstanceCollection):
+        return self.visit_properties(primitive_instance_collection, PrimitiveInstanceCollection)
+
+    @visit_objbase
+    @visit_primitive
+    def visit_bondwire(self, bondwire: Bondwire):
+        return self.visit_properties(bondwire, Bondwire)
 
     @visit_objbase
     def visit_padstack_instance(self, padstack_instance: PadstackInstance):
@@ -307,7 +338,7 @@ class EdbObjVisitorV1(VisitorBase):
                 "layer_range": [layer.name for layer in layer_range],
                 "hole_overrides": padstack_instance.get_hole_overrides(),
                 "is_layout_pin": padstack_instance.is_layout_pin,
-                "group": padstack_instance.group,
+                "group_name": padstack_instance.group.name if padstack_instance.group is not None else "",
             }
         )
 
@@ -340,9 +371,16 @@ class EdbObjVisitorV1(VisitorBase):
         return wrapper
 
     @visit_objbase
+    def visit_transform(self, transform: Transform):
+        return self.visit_properties(transform, Transform)
+
+    @visit_objbase
     @visit_hierarchy_obj
     def visit_component_group(self, component_group: ComponentGroup):
         return self.visit_properties(component_group, ComponentGroup)
+    
+    def visit_component_property(self, component_property: ComponentProperty):
+        return self.visit_properties(component_property, ComponentProperty)
 
     @visit_objbase
     @visit_hierarchy_obj

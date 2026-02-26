@@ -116,13 +116,9 @@ class EdbComparatorV1(ComparatorBase):
                 diffs.append(diff)
             return diffs if any(d is not None for d in diffs) else None
 
-        if isinstance(val1, ObjBase) or isinstance(val2, ObjBase):
-            if val1 is None:
-                val1 = self.matcher.null_edb_objects.get(type(val2).__name__, None)
-            if val2 is None:
-                val2 = self.matcher.null_edb_objects.get(type(val1).__name__, None)
+        if self.visitor.visit_map.get(type(val1)) is not None or self.visitor.visit_map.get(type(val2)) is not None:
             return self.execute(val1, val2)
-
+        
         return self.to_string(val1), self.to_string(val2), val1 == val2
 
     def to_string(self, val):
