@@ -13,6 +13,7 @@ from ansys.edb.diff.exporter import ExporterBase
 class EdbDiff:
     def __init__(
         self,
+        version: str,
         ansys_em_root: str,
         host: str,
         port: int,
@@ -21,6 +22,7 @@ class EdbDiff:
         exporter: ExporterBase,
         logger=None,
     ):
+        self.version = version
         self.ansys_em_root = ansys_em_root
         self.host = host
         self.port = port
@@ -45,6 +47,7 @@ class EdbDiff:
             edb1 = Database.open(edb_path1, True)
             edb2 = Database.open(edb_path2, True)
             comparison_results = OrderedDict()
+            comparison_results["version"] = self.version
             comparison_results["Database"] = self.comparator.execute(edb1, edb2)
             self.exporter.execute(comparison_results, output_file)
         except Exception as e:

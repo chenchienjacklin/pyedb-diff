@@ -95,6 +95,7 @@ class EdbDiffBuilderBase:
         comparator = EdbComparatorV1(visitor, matcher, [filter], self.logger)
         exporter = EdbDiffExporterV1(self.logger)
         edb_diff = EdbDiff(
+            self.version,
             self.ansys_em_root,
             self.host,
             self.port,

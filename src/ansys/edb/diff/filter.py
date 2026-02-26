@@ -39,11 +39,12 @@ class EdbDiffFilterV1(FilterBase):
         filter_keys = []
         filter_rule = self.filter_rules.get(ObjBase, {})
         for value in data.items():
-            key = value[0]
+            key, val = value
             if key in filter_rule.get("excluded_properties", []):
+                if self._execute(val):
+                    filter_keys.append(key)
                 continue
 
-            val = value[1]
             if isinstance(val, tuple):
                 if not self._execute(val):
                     is_equal = False
