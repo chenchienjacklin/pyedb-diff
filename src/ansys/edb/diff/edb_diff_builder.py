@@ -9,6 +9,7 @@ from ansys.edb.diff.exporter import EdbDiffExporterV1
 from ansys.edb.diff.filter import EdbDiffFilterV1
 from ansys.edb.diff.matcher import EdbObjMatcherV1
 from ansys.edb.diff.visitor import EdbObjVisitorV1
+from ansys.edb.diff.printer import DiffTreeBuilderV1, DiffTreePrinterV1
 from ansys.edb.diff.edb_diff import EdbDiff
 
 
@@ -102,6 +103,8 @@ class EdbDiffBuilderBase:
             self.enable_io_manager,
             comparator,
             exporter,
+            DiffTreeBuilderV1(),
+            DiffTreePrinterV1(),
             self.logger,
         )
         return edb_diff

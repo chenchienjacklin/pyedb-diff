@@ -59,6 +59,7 @@ doc = [
 
 [project.scripts]
 edbdiff = "ansys.edb.diff.main:main"
+edbversion = "ansys.edb.diff.script.edb_version:main"
 
 [tool.flit.module]
 name = "ansys.edb.diff"

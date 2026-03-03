@@ -68,50 +68,51 @@ class EdbComparatorV1(ComparatorBase):
         return keys
 
     def _diff_values(self, val1, val2):
-        if isinstance(val1, dict) or isinstance(val2, dict):
-            if val1 is None:
-                val1 = {}
-            if val2 is None:
-                val2 = {}
+        value1, value2 = val1, val2
+        if isinstance(value1, dict) or isinstance(value2, dict):
+            if value1 is None:
+                value1 = {}
+            if value2 is None:
+                value2 = {}
 
             sub_diffs = OrderedDict()
-            for sub_key in self._merge_keys_in_order(val1, val2):
-                diff_value = self._diff_values(val1.get(sub_key, None), val2.get(sub_key, None))
+            for sub_key in self._merge_keys_in_order(value1, value2):
+                diff_value = self._diff_values(value1.get(sub_key, None), value2.get(sub_key, None))
                 if diff_value is not None:
                     sub_diffs[sub_key] = diff_value
             return sub_diffs if len(sub_diffs) > 0 else None
 
-        if isinstance(val1, list) or isinstance(val2, list):
-            if val1 is None:
-                val1 = []
-            if val2 is None:
-                val2 = []
+        if isinstance(value1, list) or isinstance(value2, list):
+            if value1 is None:
+                value1 = []
+            if value2 is None:
+                value2 = []
 
-            if len(val1) == 0 and len(val2) == 0:
+            if len(value1) == 0 and len(value2) == 0:
                 return None
 
             is_obj_base = (
-                isinstance(val1[0], ObjBase) if len(val1) > 0 else isinstance(val2[0], ObjBase)
+                isinstance(value1[0], ObjBase) if len(value1) > 0 else isinstance(value2[0], ObjBase)
             )
-            edb_obj_type = type(val1[0]).__name__ if len(val1) > 0 else type(val2[0]).__name__
+            edb_obj_type = type(value1[0]).__name__ if len(value1) > 0 else type(value2[0]).__name__
             if is_obj_base:
-                return self.execute_all(val1, val2, edb_obj_type)
+                return self.execute_all(value1, value2, edb_obj_type)
 
         if isinstance(val1, tuple) or isinstance(val2, tuple):
-            if val1 is None:
-                val1 = tuple()
-            if val2 is None:
-                val2 = tuple()
+            if value1 is None:
+                value1 = tuple()
+            if value2 is None:
+                value2 = tuple()
 
-            if len(val1) == 0 and len(val2) == 0:
+            if len(value1) == 0 and len(value2) == 0:
                 return None
 
             # Element-wise comparison for tuples, fill with None if lengths differ
-            max_length = max(len(val1), len(val2))
-            val1_extended = val1 + (None,) * (max_length - len(val1))
-            val2_extended = val2 + (None,) * (max_length - len(val2))
+            max_length = max(len(value1), len(value2))
+            value1_extended = value1 + (None,) * (max_length - len(value1))
+            value2_extended = value2 + (None,) * (max_length - len(value2))
             diffs = []
-            for v1, v2 in zip(val1_extended, val2_extended):
+            for v1, v2 in zip(value1_extended, value2_extended):
                 diff = self._diff_values(v1, v2)
                 diffs.append(diff)
             return diffs if any(d is not None for d in diffs) else None

@@ -8,6 +8,7 @@ from ansys.edb.core.utility.io_manager import IOMangementType, enable_io_manager
 
 from ansys.edb.diff.comparator import ComparatorBase
 from ansys.edb.diff.exporter import ExporterBase
+from ansys.edb.diff.printer import DiffTreeBuilderBase, PrinterBase
 
 
 class EdbDiff:
@@ -20,6 +21,8 @@ class EdbDiff:
         enable_io_manager: bool,
         comparator: ComparatorBase,
         exporter: ExporterBase,
+        diff_tree_builder: DiffTreeBuilderBase,
+        printer: PrinterBase,
         logger=None,
     ):
         self.version = version
@@ -29,6 +32,8 @@ class EdbDiff:
         self.enable_io_manager = enable_io_manager
         self.comparator = comparator
         self.exporter = exporter
+        self.diff_tree_builder = diff_tree_builder
+        self.printer = printer
         self.logger = logger
 
     def execute(self, edb_path1: str, edb_path2: str, output_file: str = ""):
@@ -49,7 +54,11 @@ class EdbDiff:
             comparison_results = OrderedDict()
             comparison_results["version"] = self.version
             comparison_results["Database"] = self.comparator.execute(edb1, edb2)
-            self.exporter.execute(comparison_results, output_file)
+            if len(output_file) > 0:
+                self.exporter.execute(comparison_results, output_file)
+            else:
+                root = self.diff_tree_builder.build(comparison_results)
+                self.printer.print(root)
         except Exception as e:
             if self.logger is not None:
                 self.logger.error(f"Failed to open EDB files: {e}")

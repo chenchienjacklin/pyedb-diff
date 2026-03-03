@@ -14,7 +14,7 @@ def main():
     )
     parser.add_argument("edb_path1", help="Path to the first EDB file")
     parser.add_argument("edb_path2", help="Path to the second EDB file")
-    parser.add_argument("output_file", help="Path to output diff file")
+    parser.add_argument("output_file", nargs="?", default = "", help="Path to output diff file  (optional)")
 
     args = parser.parse_args()
 

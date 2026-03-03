@@ -3,7 +3,7 @@ ansys_em_root: "C:\\Program Files\\ANSYS Inc\\v261\\AnsysEM"
 host: "127.0.0.1"
 port: 50065
 enable_io_manager: true
-debug: true
+debug: false
 
 visit_rules:
   Database:
