@@ -19,5 +19,5 @@ else
 fi
 
 # Run the edbdiff command with the updated path
-echo "Running edbdiff on $DIR_PATH1 and $NEW_DIR_PATH"
-edbdiff $DIR_PATH1 $NEW_DIR_PATH
+echo "Running edbdiff on $NEW_DIR_PATH and $DIR_PATH1"
+edbdiff $NEW_DIR_PATH $DIR_PATH1

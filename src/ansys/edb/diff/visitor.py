@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from functools import wraps
+from enum import Enum
 
 from ansys.edb.core.database import Database
 from ansys.edb.core.definition.component_def import ComponentDef
@@ -40,7 +41,7 @@ class VisitorBase(ABC):
         pass
 
     @abstractmethod
-    def visit(self, edb_obj):
+    def visit(self, edb_obj, recursive: bool):
         pass
 
 
@@ -148,11 +149,35 @@ class EdbObjVisitorV1(VisitorBase):
                 self.logger.warning(f"{obj_type.__name__} object does not have property {prop}")
         return properties
 
-    def visit(self, edb_obj):
+    def visit(self, edb_obj, recursive=False):
+        if edb_obj is None:
+            return None
+        
+        if recursive:
+            if isinstance(edb_obj, list):
+                return [self.visit(item, recursive=True) for item in edb_obj]
+            elif isinstance(edb_obj, dict):
+                return {k: self.visit(v, recursive=True) for k, v in edb_obj.items()}
+            elif isinstance(edb_obj, tuple):
+                return tuple(self.visit(item, recursive=True) for item in edb_obj)
+
         visitor = self.visit_map.get(type(edb_obj), None)
         if visitor is not None:
-            return visitor(edb_obj)
-        return {}
+            properties = visitor(edb_obj)
+            if recursive:
+                return self.visit(properties, recursive=True)
+            return properties
+        
+        return self.to_string(edb_obj)
+
+    def to_string(self, val):
+        if isinstance(val, list):
+            return ", ".join(str(v) for v in val)
+        elif isinstance(val, tuple):
+            return ", ".join(self.to_string(v) for v in val)
+        elif isinstance(val, Enum):
+            return val.name
+        return str(val)
 
     def visit_objbase(func):
         @wraps(func)

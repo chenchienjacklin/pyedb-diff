@@ -51,8 +51,8 @@ class DiffTreeBuilderV1(DiffTreeBuilderBase):
  
     def build(self, diff_json: dict) -> DiffTreeNode:
         """Build tree from diff JSON."""
-        self.root = DiffTreeNode("Database", DiffTreeNodeType.INTERNAL)
-        self._build_recursive(diff_json.get("Database", {}), self.root)
+        self.root = DiffTreeNode("database", DiffTreeNodeType.INTERNAL)
+        self._build_recursive(diff_json.get("database", {}), self.root)
         return self.root
  
     def _build_recursive(self, data, parent_node: DiffTreeNode):
@@ -65,7 +65,8 @@ class DiffTreeBuilderV1(DiffTreeBuilderBase):
                 if isinstance(item, dict):
                     # Object in list - use id if available
                     obj_id = self._extract_id(item)
-                    child = DiffTreeNode(f"[{idx}] id={obj_id}", DiffTreeNodeType.OBJECT)
+                    diff_status = self._extract_diff_status(item)
+                    child = DiffTreeNode(f"[{idx}] id={obj_id} ({diff_status})", DiffTreeNodeType.OBJECT)
                     self._build_recursive(item, child)
                     parent_node.add_child(child)
  
@@ -97,8 +98,19 @@ class DiffTreeBuilderV1(DiffTreeBuilderBase):
         if "id" in item and self._is_diff_tuple(item["id"]):
             return item["id"][0]
         return "?"
- 
- 
+    
+    def _extract_diff_status(self, item: dict) -> str:
+        if "id" in item and self._is_diff_tuple(item["id"]):
+            id1, id2, _ = item["id"]
+            if id1 == "None":
+                return "added"
+            elif id2 == "None":
+                return "removed"
+            else:
+                return "modified"
+        return "?"
+
+
 class DiffTreePrinterV1(PrinterBase):
     """Print tree in ASCII format."""
    

@@ -6,12 +6,11 @@ from ansys.edb.core.database import Database
 from ansys.edb.core.session import session
 from ansys.edb.core.utility.io_manager import IOMangementType, enable_io_manager
 
-from ansys.edb.diff.comparator import ComparatorBase
+from ansys.edb.diff.visitor import VisitorBase
 from ansys.edb.diff.exporter import ExporterBase
-from ansys.edb.diff.printer import DiffTreeBuilderBase, PrinterBase
 
 
-class EdbDiff:
+class EdbTranslator:
     def __init__(
         self,
         version: str,
@@ -19,10 +18,8 @@ class EdbDiff:
         host: str,
         port: int,
         enable_io_manager: bool,
-        comparator: ComparatorBase,
+        visitor: VisitorBase,
         exporter: ExporterBase,
-        diff_tree_builder: DiffTreeBuilderBase,
-        printer: PrinterBase,
         logger=None,
     ):
         self.version = version
@@ -30,40 +27,33 @@ class EdbDiff:
         self.host = host
         self.port = port
         self.enable_io_manager = enable_io_manager
-        self.comparator = comparator
+        self.visitor = visitor
         self.exporter = exporter
-        self.diff_tree_builder = diff_tree_builder
-        self.printer = printer
         self.logger = logger
 
-    def execute(self, edb_path1: str, edb_path2: str, output_file: str = ""):
+    def execute(self, edb_path: str, output_file: str = ""):
         with session(self.ansys_em_root, self.port):
             with enable_io_manager(IOMangementType.READ) if self.enable_io_manager else nullcontext():
                 start = time()
-                self._execute(edb_path1, edb_path2, output_file)
+                self._execute(edb_path, output_file)
                 end = time()
                 if self.logger is not None:
                     self.logger.info(f"EDB diff execution time: {end - start:.2f} seconds")
 
-    def _execute(self, edb_path1: str, edb_path2: str, output_file: str = ""):
-        edb1 = None
-        edb2 = None
+    def _execute(self, edb_path: str, output_file: str = ""):
+        edb = None
         try:
-            edb1 = Database.open(edb_path1, True)
-            edb2 = Database.open(edb_path2, True)
-            comparison_results = OrderedDict()
-            comparison_results["version"] = self.version
-            comparison_results["database"] = self.comparator.execute(edb1, edb2)
+            edb = Database.open(edb_path, True)
+            results = OrderedDict()
+            results["version"] = self.version
+            results["database"] = self.visitor.visit(edb, True)
             if len(output_file) > 0:
-                self.exporter.execute(comparison_results, output_file)
+                self.exporter.execute(results, output_file)
             else:
-                root = self.diff_tree_builder.build(comparison_results)
-                self.printer.print(root)
+                print(results)
         except Exception as e:
             if self.logger is not None:
                 self.logger.error(f"Failed to open EDB files: {e}")
         finally:
-            if edb1:
-                edb1.close()
-            if edb2:
-                edb2.close()
+            if edb:
+                edb.close()
