@@ -42,7 +42,8 @@ class EdbDiffFilterV1(FilterBase):
             key, val = value
             if key in filter_rule.get("excluded_properties", []):
                 if self._execute(val):
-                    filter_keys.append(key)
+                    if key not in filter_rule.get("reserved_properties", []):
+                        filter_keys.append(key)
                 continue
 
             if isinstance(val, tuple):

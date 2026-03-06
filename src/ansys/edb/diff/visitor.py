@@ -21,7 +21,7 @@ from ansys.edb.core.hierarchy.group import Group
 from ansys.edb.core.hierarchy.hierarchy_obj import HierarchyObj
 from ansys.edb.core.hierarchy.structure3d import Structure3D
 from ansys.edb.core.hierarchy.via_group import ViaGroup
-from ansys.edb.core.inner.base import ObjBase
+from ansys.edb.core.inner.conn_obj import ConnObj
 from ansys.edb.core.layout.cell import Cell
 from ansys.edb.core.layout.layout import Layout
 from ansys.edb.core.primitive.circle import Circle
@@ -116,7 +116,7 @@ class EdbObjVisitorV1(VisitorBase):
                      "groups": lambda obj: self.visit_groups(obj.groups) if hasattr(obj, "groups") else None},
             Primitive: {"net_name": lambda obj: obj.net.name if hasattr(obj, "net") and obj.net is not None else None,
                         "layer_name": lambda obj: obj.layer.name if hasattr(obj, "layer") and obj.layer is not None else None,
-                        "owner": lambda obj: obj.owner.id if hasattr(obj, "owner") and obj.owner is not None else None,
+                        "owner": lambda obj: obj.owner.edb_uid if hasattr(obj, "owner") and obj.owner is not None else None,
                         "voids": lambda obj: self.visit_primitives(obj.voids) if hasattr(obj, "has_voids") and obj.has_voids else None},
             Rectangle: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
             Circle: {"parameters": lambda obj: obj.get_parameters() if hasattr(obj, "get_parameters") else None},
@@ -179,31 +179,9 @@ class EdbObjVisitorV1(VisitorBase):
             return val.name
         return str(val)
 
-    def visit_objbase(func):
-        @wraps(func)
-        def wrapper(self, obj: ObjBase):
-            objbase_properties = OrderedDict()
-            if not isinstance(obj, ObjBase):
-                self.logger.warning(f"Expected ObjBase instance, got {type(obj)}")
-                return objbase_properties
-
-            if obj.id == 0:
-                return objbase_properties
-
-            objbase_properties["id"] = obj.id
-            properties = func(self, obj)
-
-            if isinstance(properties, dict):
-                objbase_properties.update(properties)
-            return objbase_properties
-
-        return wrapper
-
-    @visit_objbase
     def visit_database(self, database: Database):
         return self.visit_properties(database, Database)
 
-    @visit_objbase
     def visit_material_def(self, material_def: MaterialDef):
         return self.visit_properties(material_def, MaterialDef)
     
@@ -218,11 +196,9 @@ class EdbObjVisitorV1(VisitorBase):
             material_properties[material_property.name] = values
         return material_properties
 
-    @visit_objbase
     def visit_padstack_def(self, padstack_def: PadstackDef):
         return self.visit_properties(padstack_def, PadstackDef)
 
-    @visit_objbase
     def visit_padstack_def_data(self, padstack_def_data: PadstackDefData):
         return self.visit_properties(padstack_def_data, PadstackDefData)
 
@@ -245,27 +221,21 @@ class EdbObjVisitorV1(VisitorBase):
                 params[pad_type.name][layer_name] = pad_parameters
         return params
 
-    @visit_objbase
     def visit_component_def(self, component_def: ComponentDef):
         return self.visit_properties(component_def, ComponentDef)
 
-    @visit_objbase
     def visit_component_model(self, component_model: ComponentModel):
         return self.visit_properties(component_model, ComponentModel)
 
-    @visit_objbase
     def visit_bondwire_def(self, bondwire_def: BondwireDef):
         return self.visit_properties(bondwire_def, BondwireDef)
     
-    @visit_objbase
     def visit_package_def(self, package_def: PackageDef):
         return self.visit_properties(package_def, PackageDef)
 
-    @visit_objbase
     def visit_cell(self, cell: Cell):
         return self.visit_properties(cell, Cell)
 
-    @visit_objbase
     def visit_layout(self, layout: Layout):
         return self.visit_properties(layout, Layout)
 
@@ -296,6 +266,26 @@ class EdbObjVisitorV1(VisitorBase):
                 continue
         return prims
 
+    def visit_connobj(func):
+        @wraps(func)
+        def wrapper(self, obj: ConnObj):
+            objbase_properties = OrderedDict()
+            if not isinstance(obj, ConnObj):
+                self.logger.warning(f"Expected ConnObj instance, got {type(obj)}")
+                return objbase_properties
+
+            if obj.id == 0:
+                return objbase_properties
+
+            objbase_properties["id"] = obj.edb_uid
+            properties = func(self, obj)
+
+            if isinstance(properties, dict):
+                objbase_properties.update(properties)
+            return objbase_properties
+
+        return wrapper
+
     def visit_primitive(func):
         @wraps(func)
         def wrapper(self, primitive: Primitive):
@@ -308,17 +298,17 @@ class EdbObjVisitorV1(VisitorBase):
 
         return wrapper
 
-    @visit_objbase
+    @visit_connobj
     @visit_primitive
     def visit_rectangle(self, rectangle: Rectangle):
         return self.visit_properties(rectangle, Rectangle)
 
-    @visit_objbase
+    @visit_connobj
     @visit_primitive
     def visit_circle(self, circle: Circle):
         return self.visit_properties(circle, Circle)
 
-    @visit_objbase
+    @visit_connobj
     @visit_primitive
     def visit_polygon(self, polygon: Polygon):
         return self.visit_properties(polygon, Polygon)
@@ -326,22 +316,22 @@ class EdbObjVisitorV1(VisitorBase):
     def visit_polygon_data(self, polygon_data: PolygonData):
         return self.visit_properties(polygon_data, PolygonData)
 
-    @visit_objbase
+    @visit_connobj
     @visit_primitive
     def visit_path(self, path: Path):
         return self.visit_properties(path, Path)
     
-    @visit_objbase
+    @visit_connobj
     @visit_primitive
     def visit_primitive_instance_collection(self, primitive_instance_collection: PrimitiveInstanceCollection):
         return self.visit_properties(primitive_instance_collection, PrimitiveInstanceCollection)
 
-    @visit_objbase
+    @visit_connobj
     @visit_primitive
     def visit_bondwire(self, bondwire: Bondwire):
         return self.visit_properties(bondwire, Bondwire)
 
-    @visit_objbase
+    @visit_connobj
     def visit_padstack_instance(self, padstack_instance: PadstackInstance):
         position_and_rotation = padstack_instance.get_position_and_rotation()
         layer_range = []
@@ -395,11 +385,10 @@ class EdbObjVisitorV1(VisitorBase):
 
         return wrapper
 
-    @visit_objbase
     def visit_transform(self, transform: Transform):
         return self.visit_properties(transform, Transform)
 
-    @visit_objbase
+    @visit_connobj
     @visit_hierarchy_obj
     def visit_component_group(self, component_group: ComponentGroup):
         return self.visit_properties(component_group, ComponentGroup)
@@ -407,12 +396,12 @@ class EdbObjVisitorV1(VisitorBase):
     def visit_component_property(self, component_property: ComponentProperty):
         return self.visit_properties(component_property, ComponentProperty)
 
-    @visit_objbase
+    @visit_connobj
     @visit_hierarchy_obj
     def visit_structure3d(self, structure3d: Structure3D):
         return self.visit_properties(structure3d, Structure3D)
     
-    @visit_objbase
+    @visit_connobj
     @visit_hierarchy_obj
     def visit_via_group(self, via_group: ViaGroup):
         return self.visit_properties(via_group, ViaGroup)

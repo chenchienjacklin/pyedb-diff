@@ -96,18 +96,24 @@ class DiffTreeBuilderV1(DiffTreeBuilderBase):
  
     def _extract_id(self, item: dict) -> str:
         if "id" in item and self._is_diff_tuple(item["id"]):
-            return item["id"][0]
+            return item["id"][1]
+        if "name" in item and self._is_diff_tuple(item["name"]):
+            return item["name"][1]
         return "?"
     
     def _extract_diff_status(self, item: dict) -> str:
+        id1 = id2 = None
         if "id" in item and self._is_diff_tuple(item["id"]):
             id1, id2, _ = item["id"]
-            if id1 == "None":
-                return "added"
-            elif id2 == "None":
-                return "removed"
-            else:
-                return "modified"
+        elif "name" in item and self._is_diff_tuple(item["name"]):
+            id1, id2, _ = item["name"]
+        
+        if id1 is None or id1 == "None":
+            return "added"
+        elif id2 is None or id2 == "None":
+            return "removed"
+        else:
+            return "modified"
         return "?"
 
 
